@@ -1,0 +1,100 @@
+name: ClipSync CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-*'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend Lint & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run linter
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Type check
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Run unit tests
+        working-directory: frontend
+        run: npm test
+
+  backend:
+    name: Backend Build & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Build and test with Maven
+        working-directory: backend
+        run: mvn -B clean verify
+
+  infra-and-cost:
+    name: Infrastructure & Cost Guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Validate SAM Template
+        working-directory: infra
+        run: sam validate --lint
+
+      - name: Run Cost Guard
+        run: bash scripts/guard-cost.sh
+
+  security:
+    name: Security & Secrets Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Secrets & Log Leak Scanner
+        run: bash scripts/scan-secrets-logs.sh
+
+      - name: Setup Node.js for Audit
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Frontend Dependency Audit
+        working-directory: frontend
+        run: npm audit --audit-level=high

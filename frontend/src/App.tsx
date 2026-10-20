@@ -1,0 +1,99 @@
+import React, { useState, useCallback } from 'react'
+import { SYNC_CONFIG } from './config/syncConfig'
+import './App.css'
+
+export type StorageMode = 'ephemeral' | 'temporary' | 'history'
+export type ConnectionState = 'offline' | 'connecting' | 'direct' | 'relay'
+
+export const App: React.FC = () => {
+  const [content, setContent] = useState<string>('')
+  const [storageMode, setStorageMode] = useState<StorageMode>('ephemeral')
+  const [connectionState] = useState<ConnectionState>('offline')
+
+  // Calculate byte length strictly using UTF-8 TextEncoder per ADR-014
+  const byteCount = new TextEncoder().encode(content).length
+  const isOverLimit = byteCount > SYNC_CONFIG.MAX_PLAIN_TEXT_BYTES
+  const bytePercentage = Math.min(100, Math.round((byteCount / SYNC_CONFIG.MAX_PLAIN_TEXT_BYTES) * 100))
+
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    // Per ADR-004: Paste events synchronize immediately (bypassing debounce)
+    const pastedText = e.clipboardData.getData('text')
+    if (pastedText) {
+      // In Phase 5 this will trigger immediate snapshot generation
+      console.info('[ClipSync] Paste event received:', { length: pastedText.length })
+    }
+  }, [])
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setContent(e.target.value)
+  }
+
+  return (
+    <div className="app-container">
+      <header className="app-header">
+        <div className="header-brand">
+          <span className="brand-logo">⚡</span>
+          <h1>ClipSync</h1>
+          <span className="badge-preview">E2EE Preview</span>
+        </div>
+
+        <div className="header-controls">
+          <div className="connection-badge" data-status={connectionState}>
+            <span className="status-dot"></span>
+            <span className="status-text">{connectionState.toUpperCase()}</span>
+          </div>
+
+          <div className="storage-mode-selector">
+            <label htmlFor="storage-mode">Mode:</label>
+            <select
+              id="storage-mode"
+              value={storageMode}
+              onChange={(e) => setStorageMode(e.target.value as StorageMode)}
+            >
+              <option value="ephemeral">Ephemeral (Relay Only)</option>
+              <option value="temporary">Temporary (10 Min)</option>
+              <option value="history">History (30 Days)</option>
+            </select>
+          </div>
+        </div>
+      </header>
+
+      <main className="editor-container">
+        <div className="editor-toolbar">
+          <div className="metrics">
+            <span className={`byte-counter ${isOverLimit ? 'over-limit' : ''}`}>
+              {byteCount.toLocaleString()} / {SYNC_CONFIG.MAX_PLAIN_TEXT_BYTES.toLocaleString()} bytes
+            </span>
+            <span className="percentage">({bytePercentage}%)</span>
+          </div>
+          {isOverLimit && (
+            <span className="limit-warning" role="alert">
+              Payload exceeds 64 KiB maximum limit!
+            </span>
+          )}
+        </div>
+
+        <textarea
+          id="clipsync-editor"
+          className="editor-textarea"
+          aria-label="ClipSync Clipboard Editor"
+          placeholder="Paste or type text to synchronize across paired devices automatically (no send button)..."
+          value={content}
+          onChange={handleChange}
+          onPaste={handlePaste}
+          rows={16}
+        />
+      </main>
+
+      <footer className="app-footer">
+        <div className="footer-info">
+          <span>End-to-End Encrypted: AES-256-GCM + HPKE (RFC 9180)</span>
+          <span className="separator">•</span>
+          <span>Automatic Sync (Paste = Immediate, Typing = 250ms debounce)</span>
+        </div>
+      </footer>
+    </div>
+  )
+}
+
+export default App

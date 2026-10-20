@@ -1,0 +1,217 @@
+:root {
+  --bg-primary: #0f1117;
+  --bg-secondary: #1a1d27;
+  --bg-elevated: #242938;
+  --border-color: #2f364a;
+  --border-focus: #6366f1;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent-color: #6366f1;
+  --accent-glow: rgba(99, 102, 241, 0.25);
+  --warning-color: #ef4444;
+  --warning-bg: rgba(239, 68, 68, 0.15);
+  --success-color: #10b981;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 24px;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-logo {
+  font-size: 28px;
+}
+
+.header-brand h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.badge-preview {
+  font-size: 11px;
+  padding: 3px 8px;
+  background-color: var(--accent-glow);
+  color: #a5b4fc;
+  border: 1px solid var(--border-focus);
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.connection-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+}
+
+.connection-badge[data-status="direct"] .status-dot {
+  background-color: var(--success-color);
+  box-shadow: 0 0 8px var(--success-color);
+}
+
+.connection-badge[data-status="relay"] .status-dot {
+  background-color: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+}
+
+.connection-badge[data-status="offline"] .status-dot {
+  background-color: var(--text-muted);
+}
+
+.storage-mode-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.storage-mode-selector select {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.storage-mode-selector select:focus {
+  border-color: var(--border-focus);
+}
+
+.editor-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.metrics {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.byte-counter.over-limit {
+  color: var(--warning-color);
+  font-weight: 700;
+}
+
+.percentage {
+  margin-left: 6px;
+  color: var(--text-muted);
+}
+
+.limit-warning {
+  color: var(--warning-color);
+  background-color: var(--warning-bg);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.editor-textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 400px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.editor-textarea:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.app-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.footer-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+.separator {
+  color: var(--border-color);
+}

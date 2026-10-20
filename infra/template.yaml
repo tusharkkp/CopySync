@@ -1,0 +1,33 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ClipSync Serverless Infrastructure - End-to-End Encrypted Browser-Based Clipboard Sync
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+    Description: Deployment stage environment
+
+Globals:
+  Function:
+    Timeout: 10
+    MemorySize: 512
+    Architectures:
+      - arm64
+
+Resources:
+  # Phase 1 Skeleton: Zero-cost placeholder to satisfy CloudFormation requirement until Phase 4
+  ClipSyncAppMarker:
+    Type: AWS::CloudFormation::WaitConditionHandle
+
+Outputs:
+  ProjectName:
+    Description: ClipSync Infrastructure Project
+    Value: clipsync
+  DeploymentEnvironment:
+    Description: Active deployment environment
+    Value: !Ref Environment
