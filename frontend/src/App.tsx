@@ -1,11 +1,14 @@
 import React, { useState, useCallback } from 'react'
 import { SYNC_CONFIG } from './config/syncConfig'
+import { CryptoDemo } from './components/CryptoDemo'
 import './App.css'
 
 export type StorageMode = 'ephemeral' | 'temporary' | 'history'
 export type ConnectionState = 'offline' | 'connecting' | 'direct' | 'relay'
+export type ActiveView = 'editor' | 'crypto-demo'
 
 export const App: React.FC = () => {
+  const [activeView, setActiveView] = useState<ActiveView>('editor')
   const [content, setContent] = useState<string>('')
   const [storageMode, setStorageMode] = useState<StorageMode>('ephemeral')
   const [connectionState] = useState<ConnectionState>('offline')
@@ -13,16 +16,23 @@ export const App: React.FC = () => {
   // Calculate byte length strictly using UTF-8 TextEncoder per ADR-014
   const byteCount = new TextEncoder().encode(content).length
   const isOverLimit = byteCount > SYNC_CONFIG.MAX_PLAIN_TEXT_BYTES
-  const bytePercentage = Math.min(100, Math.round((byteCount / SYNC_CONFIG.MAX_PLAIN_TEXT_BYTES) * 100))
+  const bytePercentage = Math.min(
+    100,
+    Math.round((byteCount / SYNC_CONFIG.MAX_PLAIN_TEXT_BYTES) * 100)
+  )
 
-  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    // Per ADR-004: Paste events synchronize immediately (bypassing debounce)
-    const pastedText = e.clipboardData.getData('text')
-    if (pastedText) {
-      // In Phase 5 this will trigger immediate snapshot generation
-      console.info('[ClipSync] Paste event received:', { length: pastedText.length })
-    }
-  }, [])
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      // Per ADR-004: Paste events synchronize immediately (bypassing debounce)
+      const pastedText = e.clipboardData.getData('text')
+      if (pastedText) {
+        console.info('[ClipSync] Paste event received:', {
+          length: pastedText.length,
+        })
+      }
+    },
+    []
+  )
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setContent(e.target.value)
@@ -38,6 +48,26 @@ export const App: React.FC = () => {
         </div>
 
         <div className="header-controls">
+          {/* Navigation View Switcher */}
+          <div className="view-switcher" role="tablist">
+            <button
+              className={`view-tab-btn ${activeView === 'editor' ? 'active' : ''}`}
+              onClick={() => setActiveView('editor')}
+              role="tab"
+              aria-selected={activeView === 'editor'}
+            >
+              📝 Editor
+            </button>
+            <button
+              className={`view-tab-btn ${activeView === 'crypto-demo' ? 'active' : ''}`}
+              onClick={() => setActiveView('crypto-demo')}
+              role="tab"
+              aria-selected={activeView === 'crypto-demo'}
+            >
+              🔐 Crypto Demo
+            </button>
+          </div>
+
           <div className="connection-badge" data-status={connectionState}>
             <span className="status-dot"></span>
             <span className="status-text">{connectionState.toUpperCase()}</span>
@@ -59,30 +89,39 @@ export const App: React.FC = () => {
       </header>
 
       <main className="editor-container">
-        <div className="editor-toolbar">
-          <div className="metrics">
-            <span className={`byte-counter ${isOverLimit ? 'over-limit' : ''}`}>
-              {byteCount.toLocaleString()} / {SYNC_CONFIG.MAX_PLAIN_TEXT_BYTES.toLocaleString()} bytes
-            </span>
-            <span className="percentage">({bytePercentage}%)</span>
-          </div>
-          {isOverLimit && (
-            <span className="limit-warning" role="alert">
-              Payload exceeds 64 KiB maximum limit!
-            </span>
-          )}
-        </div>
+        {activeView === 'editor' ? (
+          <>
+            <div className="editor-toolbar">
+              <div className="metrics">
+                <span
+                  className={`byte-counter ${isOverLimit ? 'over-limit' : ''}`}
+                >
+                  {byteCount.toLocaleString()} /{' '}
+                  {SYNC_CONFIG.MAX_PLAIN_TEXT_BYTES.toLocaleString()} bytes
+                </span>
+                <span className="percentage">({bytePercentage}%)</span>
+              </div>
+              {isOverLimit && (
+                <span className="limit-warning" role="alert">
+                  Payload exceeds 64 KiB maximum limit!
+                </span>
+              )}
+            </div>
 
-        <textarea
-          id="clipsync-editor"
-          className="editor-textarea"
-          aria-label="ClipSync Clipboard Editor"
-          placeholder="Paste or type text to synchronize across paired devices automatically (no send button)..."
-          value={content}
-          onChange={handleChange}
-          onPaste={handlePaste}
-          rows={16}
-        />
+            <textarea
+              id="clipsync-editor"
+              className="editor-textarea"
+              aria-label="ClipSync Clipboard Editor"
+              placeholder="Paste or type text to synchronize across paired devices automatically (no send button)..."
+              value={content}
+              onChange={handleChange}
+              onPaste={handlePaste}
+              rows={16}
+            />
+          </>
+        ) : (
+          <CryptoDemo />
+        )}
       </main>
 
       <footer className="app-footer">
