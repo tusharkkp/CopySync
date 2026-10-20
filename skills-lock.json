@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "skills": {
+    "chaiui": {
+      "source": "ui.chaicode.com",
+      "sourceUrl": "https://ui.chaicode.com",
+      "sourceType": "well-known",
+      "computedHash": "3257f541564437e090d209c21b63489b8a3ae609c10a08a88edfb9c54cdab47a",
+      "wellKnownDigest": "sha256:8d150c65ffb0423802b06271e72bff52a86270dde8ce3d10a2d730ddfb5efcee"
+    },
+    "chaiui-review": {
+      "source": "ui.chaicode.com",
+      "sourceUrl": "https://ui.chaicode.com",
+      "sourceType": "well-known",
+      "computedHash": "47e97634b300b32c97c27f51dd60037b677acca37d3e41650a25011440502fde",
+      "wellKnownDigest": "sha256:e9ccb5a90d1b853560799347dd391373fbbe992acc9fee674bae525acb9816f7"
+    },
+    "gravitas": {
+      "source": "udaysharmadev/Gravitas",
+      "sourceType": "github",
+      "skillPath": "skills/gravitas/SKILL.md",
+      "computedHash": "1ef9a8048a626aafe7c87f74cefaf030e71cff6231abad5e917cc5d9cd1fdefb"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-design-guidelines/SKILL.md",
+      "computedHash": "d8e7d3afe37dcc8a97b99ffb5afdb4d0919ae0092ea8b68f44eb201f035e33ac"
+    }
+  }
+}
