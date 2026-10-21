@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { WebCryptoProvider } from '../crypto/WebCryptoProvider'
-import { DeviceKeyMaterial, WireMessage } from '../crypto/types'
+import type { DeviceKeyMaterial, WireMessage } from '../crypto/types'
 import { base64UrlToUint8Array, uint8ArrayToBase64Url } from '../crypto/base64url'
 import './CryptoDemo.css'
 

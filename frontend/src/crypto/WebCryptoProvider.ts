@@ -1,6 +1,6 @@
 import { CipherSuite, KemId, KdfId, AeadId } from 'hpke-js'
-import { CryptoProvider } from './CryptoProvider'
-import {
+import type { CryptoProvider } from './CryptoProvider'
+import type {
   SnapshotHeader,
   WireMessage,
   DeviceKeyMaterial,

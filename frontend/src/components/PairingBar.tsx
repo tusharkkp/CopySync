@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { ClipSyncState, StorageMode } from '../sync/ClipSyncService'
+import type { ClipSyncState, StorageMode } from '../sync/ClipSyncService'
 
 export interface PairingBarProps {
   state: ClipSyncState

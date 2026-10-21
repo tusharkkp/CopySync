@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { WebCryptoProvider } from '../WebCryptoProvider'
-import { DeviceKeyMaterial, RecipientKeyMap, SnapshotHeader } from '../types'
+import type { DeviceKeyMaterial, RecipientKeyMap, SnapshotHeader } from '../types'
 import { base64UrlToUint8Array, uint8ArrayToBase64Url } from '../base64url'
 
 describe('CRYPTO-PROVIDER: E2EE Engine & Tamper Matrix', () => {

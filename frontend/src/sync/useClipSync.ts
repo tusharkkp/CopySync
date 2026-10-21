@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ClipSyncService, ClipSyncState, StorageMode } from './ClipSyncService'
+import { ClipSyncService, type ClipSyncState, type StorageMode } from './ClipSyncService'
 import { WebCryptoProvider } from '../crypto/WebCryptoProvider'
 import { WebSocketClient } from '../transport/WebSocketClient'
 

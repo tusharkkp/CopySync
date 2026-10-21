@@ -3,7 +3,7 @@ import { SYNC_CONFIG } from './config/syncConfig'
 import { CryptoDemo } from './components/CryptoDemo'
 import { PairingBar } from './components/PairingBar'
 import { useClipSync } from './sync/useClipSync'
-import { StorageMode } from './sync/ClipSyncService'
+import type { StorageMode } from './sync/ClipSyncService'
 import './App.css'
 
 export type { StorageMode }

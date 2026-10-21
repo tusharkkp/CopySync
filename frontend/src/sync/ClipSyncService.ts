@@ -1,13 +1,13 @@
-import { CryptoProvider } from '../crypto/CryptoProvider'
-import {
+import type { CryptoProvider } from '../crypto/CryptoProvider'
+import type {
   DeviceKeyMaterial,
   PeerPublicKey,
   RecipientKeyMap,
   SnapshotHeader,
   WireMessage,
 } from '../crypto/types'
-import { WebSocketClient, WebSocketStatus } from '../transport/WebSocketClient'
-import { WebRtcManager, WebRtcOptions, WebRtcState } from '../webrtc/WebRtcManager'
+import { WebSocketClient, type WebSocketStatus } from '../transport/WebSocketClient'
+import { WebRtcManager, type WebRtcOptions, type WebRtcState } from '../webrtc/WebRtcManager'
 import { SYNC_CONFIG } from '../config/syncConfig'
 
 export type StorageMode = 'ephemeral' | 'temporary' | 'history'
