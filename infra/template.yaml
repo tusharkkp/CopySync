@@ -94,7 +94,9 @@ Resources:
       CodeUri: ../backend
       Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest
       Runtime: java21
-      ReservedConcurrentExecutions: 5
+      # Note: ReservedConcurrentExecutions removed — account concurrency quota is 10
+      # and AWS requires all 10 to remain unreserved. Cost is braked by API Gateway
+      # stage throttling (10 rps / 20 burst) per DEC-013.
       Environment:
         Variables:
           SPRING_CLOUD_FUNCTION_DEFINITION: clipSyncWebSocketHandler
