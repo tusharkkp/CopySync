@@ -74,6 +74,13 @@ switch ($Mode) {
         Run-InfraChecks
         Run-Security
     }
+    "9" {
+        Write-Host "Running Phase 9: Testing & Security Hardening Gate..." -ForegroundColor Cyan
+        Run-FrontendFast
+        Run-BackendFast
+        Run-InfraChecks
+        Run-Security
+    }
     default {
         Write-Host "Running Mode $Mode..."
         Run-FrontendFast
