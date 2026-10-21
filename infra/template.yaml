@@ -157,7 +157,15 @@ Resources:
       ApiId: !Ref WebSocketApi
       RouteKey: "$default"
       AuthorizationType: NONE
+      RouteResponseSelectionExpression: "$default"
       Target: !Sub "integrations/${WebSocketIntegration}"
+
+  DefaultRouteResponse:
+    Type: AWS::ApiGatewayV2::RouteResponse
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteId: !Ref DefaultRoute
+      RouteResponseKey: "$default"
 
   # Custom Protocol Routes
   SessionCreateRoute:
@@ -166,7 +174,15 @@ Resources:
       ApiId: !Ref WebSocketApi
       RouteKey: "session.create"
       AuthorizationType: NONE
+      RouteResponseSelectionExpression: "$default"
       Target: !Sub "integrations/${WebSocketIntegration}"
+
+  SessionCreateRouteResponse:
+    Type: AWS::ApiGatewayV2::RouteResponse
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteId: !Ref SessionCreateRoute
+      RouteResponseKey: "$default"
 
   SessionJoinRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -174,7 +190,15 @@ Resources:
       ApiId: !Ref WebSocketApi
       RouteKey: "session.join"
       AuthorizationType: NONE
+      RouteResponseSelectionExpression: "$default"
       Target: !Sub "integrations/${WebSocketIntegration}"
+
+  SessionJoinRouteResponse:
+    Type: AWS::ApiGatewayV2::RouteResponse
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteId: !Ref SessionJoinRoute
+      RouteResponseKey: "$default"
 
   ClipboardUpdateRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -182,7 +206,15 @@ Resources:
       ApiId: !Ref WebSocketApi
       RouteKey: "clipboard.update"
       AuthorizationType: NONE
+      RouteResponseSelectionExpression: "$default"
       Target: !Sub "integrations/${WebSocketIntegration}"
+
+  ClipboardUpdateRouteResponse:
+    Type: AWS::ApiGatewayV2::RouteResponse
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteId: !Ref ClipboardUpdateRoute
+      RouteResponseKey: "$default"
 
   ClipboardReadRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -190,7 +222,15 @@ Resources:
       ApiId: !Ref WebSocketApi
       RouteKey: "clipboard.read"
       AuthorizationType: NONE
+      RouteResponseSelectionExpression: "$default"
       Target: !Sub "integrations/${WebSocketIntegration}"
+
+  ClipboardReadRouteResponse:
+    Type: AWS::ApiGatewayV2::RouteResponse
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteId: !Ref ClipboardReadRoute
+      RouteResponseKey: "$default"
 
   SignalingOfferRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -198,7 +238,15 @@ Resources:
       ApiId: !Ref WebSocketApi
       RouteKey: "signaling.offer"
       AuthorizationType: NONE
+      RouteResponseSelectionExpression: "$default"
       Target: !Sub "integrations/${WebSocketIntegration}"
+
+  SignalingOfferRouteResponse:
+    Type: AWS::ApiGatewayV2::RouteResponse
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteId: !Ref SignalingOfferRoute
+      RouteResponseKey: "$default"
 
   SignalingAnswerRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -206,7 +254,15 @@ Resources:
       ApiId: !Ref WebSocketApi
       RouteKey: "signaling.answer"
       AuthorizationType: NONE
+      RouteResponseSelectionExpression: "$default"
       Target: !Sub "integrations/${WebSocketIntegration}"
+
+  SignalingAnswerRouteResponse:
+    Type: AWS::ApiGatewayV2::RouteResponse
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteId: !Ref SignalingAnswerRoute
+      RouteResponseKey: "$default"
 
   SignalingIceRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -214,7 +270,15 @@ Resources:
       ApiId: !Ref WebSocketApi
       RouteKey: "signaling.ice"
       AuthorizationType: NONE
+      RouteResponseSelectionExpression: "$default"
       Target: !Sub "integrations/${WebSocketIntegration}"
+
+  SignalingIceRouteResponse:
+    Type: AWS::ApiGatewayV2::RouteResponse
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteId: !Ref SignalingIceRoute
+      RouteResponseKey: "$default"
 
   # API Gateway Stage with Active Throttling Cost Brake (DEC-013)
   WebSocketStage:
