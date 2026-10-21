@@ -51,24 +51,30 @@ public class DynamoDbConfig {
         return builder.build();
     }
 
+    @Value("${clipsync.dynamodb.table.registry:ClipSyncRegistry}")
+    private String registryTableName;
+
+    @Value("${clipsync.dynamodb.table.clipboard:ClipSyncClipboard}")
+    private String clipboardTableName;
+
     @Bean
     public SessionRepository sessionRepository(DynamoDbClient client) {
-        return new DynamoDbSessionRepository(client);
+        return new DynamoDbSessionRepository(client, registryTableName);
     }
 
     @Bean
     public DeviceRepository deviceRepository(DynamoDbClient client) {
-        return new DynamoDbDeviceRepository(client);
+        return new DynamoDbDeviceRepository(client, registryTableName);
     }
 
     @Bean
     public ConnectionRepository connectionRepository(DynamoDbClient client) {
-        return new DynamoDbConnectionRepository(client);
+        return new DynamoDbConnectionRepository(client, registryTableName);
     }
 
     @Bean
     public PairingRepository pairingRepository(DynamoDbClient client) {
-        return new DynamoDbPairingRepository(client);
+        return new DynamoDbPairingRepository(client, registryTableName);
     }
 
     @Bean
@@ -78,7 +84,7 @@ public class DynamoDbConfig {
 
     @Bean
     public ClipboardRepository clipboardRepository(DynamoDbClient client) {
-        return new DynamoDbClipboardRepository(client);
+        return new DynamoDbClipboardRepository(client, clipboardTableName);
     }
 
     @Value("${clipsync.apigateway.endpoint:}")

@@ -98,10 +98,10 @@ Resources:
       Environment:
         Variables:
           SPRING_CLOUD_FUNCTION_DEFINITION: clipSyncWebSocketHandler
-          clipsync.dynamodb.tableName.registry: !Ref RegistryTable
-          clipsync.dynamodb.tableName.clipboard: !Ref ClipboardTable
-          clipsync.aws.region: !Ref "AWS::Region"
-          clipsync.apigateway.endpoint: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+          CLIPSYNC_DYNAMODB_TABLE_REGISTRY: !Ref RegistryTable
+          CLIPSYNC_DYNAMODB_TABLE_CLIPBOARD: !Ref ClipboardTable
+          CLIPSYNC_AWS_REGION: !Ref "AWS::Region"
+          CLIPSYNC_APIGATEWAY_ENDPOINT: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RegistryTable
