@@ -7,6 +7,8 @@ export interface PairingBarProps {
   onJoinSession: (sessionId: string, pairingCode: string) => void
   onLeaveSession: () => void
   onCloseSession?: () => void
+  onRevokeDevice?: (deviceId: string) => void
+  onDismissConflict?: (conflictId: string) => void
 }
 
 export const PairingBar: React.FC<PairingBarProps> = ({
@@ -15,6 +17,8 @@ export const PairingBar: React.FC<PairingBarProps> = ({
   onJoinSession,
   onLeaveSession,
   onCloseSession,
+  onRevokeDevice,
+  onDismissConflict,
 }) => {
   const [showJoinForm, setShowJoinForm] = useState(false)
   const [joinSessionId, setJoinSessionId] = useState('')
@@ -210,6 +214,18 @@ export const PairingBar: React.FC<PairingBarProps> = ({
               {state.storageMode === 'history' && `📜 ${state.retentionDays || 30}d History`}
             </div>
 
+            {(state.keyEpoch ?? 1) > 1 && (
+              <div className="key-epoch-badge" data-testid="key-epoch-badge">
+                🔑 Epoch {state.keyEpoch}
+              </div>
+            )}
+
+            {(state.pendingQueueLength ?? 0) > 0 && (
+              <div className="pending-queue-badge" data-testid="pending-queue-badge">
+                ⏳ {state.pendingQueueLength} queued offline
+              </div>
+            )}
+
             {state.sas && (
               <div className="sas-fingerprint" title="Safety Fingerprint / Short Authentication String (SAS)">
                 <span className="sas-label">Fingerprint:</span>
@@ -218,6 +234,31 @@ export const PairingBar: React.FC<PairingBarProps> = ({
               </div>
             )}
           </div>
+
+          {/* Connected Devices List with Revoke Action (SEC-11) */}
+          {peerCount > 0 && (
+            <div className="peers-panel" data-testid="peers-panel">
+              <span className="peers-heading">Connected Devices:</span>
+              <div className="peers-list">
+                {Object.keys(state.peers || {}).map((peerId) => (
+                  <div key={peerId} className="peer-chip" data-testid={`peer-chip-${peerId}`}>
+                    <span className="peer-chip-id">📱 {peerId}</span>
+                    {onRevokeDevice && (
+                      <button
+                        type="button"
+                        className="btn btn-tiny btn-danger peer-revoke-btn"
+                        onClick={() => onRevokeDevice(peerId)}
+                        data-testid={`btn-revoke-${peerId}`}
+                        title="Revoke device access and rotate encryption keys (SEC-11)"
+                      >
+                        Revoke
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="active-session-actions">
             {state.isSyncing && (
@@ -242,6 +283,39 @@ export const PairingBar: React.FC<PairingBarProps> = ({
                 Close & Purge
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Preserved Concurrent Conflicts Notification Banner (DEC-016) */}
+      {Boolean(state.conflicts && state.conflicts.length > 0) && (
+        <div className="conflicts-banner" data-testid="conflicts-banner" role="alert">
+          <div className="conflicts-header">
+            <span>⚠️ {state.conflicts?.length} Concurrent Conflict(s) Preserved (DEC-016)</span>
+          </div>
+          <div className="conflicts-list">
+            {state.conflicts?.map((conflict) => (
+              <div key={conflict.conflictId} className="conflict-card" data-testid="conflict-card">
+                <div className="conflict-meta">
+                  <span className="conflict-tag">From: {conflict.senderDeviceId}</span>
+                  <span className="conflict-tag">Clock: {conflict.logicalClock}</span>
+                  <span className="conflict-id">{conflict.conflictId}</span>
+                  {onDismissConflict && (
+                    <button
+                      type="button"
+                      className="btn btn-tiny btn-secondary"
+                      onClick={() => onDismissConflict(conflict.conflictId)}
+                      data-testid={`btn-dismiss-${conflict.conflictId}`}
+                    >
+                      Dismiss
+                    </button>
+                  )}
+                </div>
+                <div className="conflict-preview">
+                  <code>{conflict.plaintext}</code>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

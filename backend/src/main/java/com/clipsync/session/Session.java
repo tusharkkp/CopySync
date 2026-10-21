@@ -35,4 +35,8 @@ public record Session(
             : (24 * 3600));
         return new Session(sessionId, mode, retentionDays, 1, SessionStatus.ACTIVE, now, defaultTtl);
     }
+
+    public Session withIncrementedKeyEpoch() {
+        return new Session(sessionId, storageMode, retentionDays, keyEpoch + 1, status, createdAt, ttl);
+    }
 }

@@ -52,6 +52,12 @@ export const SYNC_CONFIG = {
 
   /** WebRTC direct connection negotiation timeout before falling back to relay (10 seconds) */
   WEBRTC_CONNECT_TIMEOUT_MS: 10 * 1000,
+
+  /** Maximum allowable forward clock drift before update is rejected as malicious spoofing (DEC-016) */
+  MAX_CLOCK_DRIFT: 10000,
+
+  /** Feature flag: Client-side recovery secret utility (DEC-015: Disabled by default) */
+  FEATURE_RECOVERY_ENABLED: false,
 } as const
 
 export type SyncConfig = typeof SYNC_CONFIG

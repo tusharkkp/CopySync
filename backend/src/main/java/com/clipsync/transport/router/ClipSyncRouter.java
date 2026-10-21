@@ -118,6 +118,7 @@ public class ClipSyncRouter {
             case "session.join" -> handleSessionJoin(connectionId, frame);
             case "session.close" -> handleSessionClose(connectionId, frame);
             case "sync.resume" -> handleSyncResume(connectionId, frame);
+            case "device.revoke" -> handleDeviceRevoke(connectionId, frame);
             case "clipboard.update" -> handleClipboardUpdate(connectionId, frame, body);
             case "clipboard.read" -> handleClipboardRead(connectionId, frame);
             case "signaling.offer", "signaling.answer", "signaling.ice" -> handleSignaling(connectionId, frame, body);
@@ -268,6 +269,18 @@ public class ClipSyncRouter {
         String contentType = header.has("contentType") ? header.get("contentType").asText() : "text/plain";
         int plaintextBytes = header.has("plaintextBytes") ? header.get("plaintextBytes").asInt() : 0;
 
+        // SEC-11: Device Revocation & Key Epoch verification
+        Optional<Device> senderDeviceOpt = deviceRepository.findBySessionAndDeviceId(session.sessionId(), senderDeviceId);
+        if (senderDeviceOpt.isEmpty()) {
+            return buildErrorResponse(404, frame.action(), frame.requestId(), ProtocolErrorCode.DEVICE_NOT_FOUND, "Sender device not found");
+        }
+        if (senderDeviceOpt.get().status() == DeviceStatus.REVOKED) {
+            return buildErrorResponse(403, frame.action(), frame.requestId(), ProtocolErrorCode.DEVICE_REVOKED, "Device has been revoked from session");
+        }
+        if (keyEpoch < session.keyEpoch()) {
+            return buildErrorResponse(403, frame.action(), frame.requestId(), ProtocolErrorCode.UNAUTHORIZED, "Stale key epoch");
+        }
+
         String ciphertext = payload.get("ciphertext").asText();
         String nonce = payload.get("nonce").asText();
         String signature = frame.snapshotSignature() != null ? frame.snapshotSignature() : "";
@@ -330,7 +343,15 @@ public class ClipSyncRouter {
             return buildErrorResponse(404, frame.action(), frame.requestId(), ProtocolErrorCode.SESSION_NOT_FOUND, "Session not found");
         }
 
-        Optional<ClipboardSnapshot> snapshot = clipboardRepository.findLatest(optSession.get());
+        Session session = optSession.get();
+        if (frame.deviceId() != null) {
+            Optional<Device> devOpt = deviceRepository.findBySessionAndDeviceId(session.sessionId(), frame.deviceId());
+            if (devOpt.isPresent() && devOpt.get().status() == DeviceStatus.REVOKED) {
+                return buildErrorResponse(403, frame.action(), frame.requestId(), ProtocolErrorCode.DEVICE_REVOKED, "Device has been revoked from session");
+            }
+        }
+
+        Optional<ClipboardSnapshot> snapshot = clipboardRepository.findLatest(session);
         ObjectNode data = objectMapper.createObjectNode();
         if (snapshot.isPresent()) {
             ClipboardSnapshot s = snapshot.get();
@@ -387,6 +408,13 @@ public class ClipSyncRouter {
         }
 
         Session session = optSession.get();
+        if (frame.deviceId() != null) {
+            Optional<Device> devOpt = deviceRepository.findBySessionAndDeviceId(session.sessionId(), frame.deviceId());
+            if (devOpt.isPresent() && devOpt.get().status() == DeviceStatus.REVOKED) {
+                return buildErrorResponse(403, frame.action(), frame.requestId(), ProtocolErrorCode.DEVICE_REVOKED, "Device has been revoked from session");
+            }
+        }
+
         ObjectNode data = objectMapper.createObjectNode();
         data.put("sessionId", session.sessionId());
         data.put("storageMode", session.storageMode().name());
@@ -436,9 +464,73 @@ public class ClipSyncRouter {
         return buildOkResponse(frame.action(), frame.requestId(), data);
     }
 
+    private APIGatewayV2WebSocketResponse handleDeviceRevoke(String connectionId, WebSocketFrame frame) {
+        if (frame.sessionId() == null || frame.deviceId() == null || frame.targetDeviceId() == null) {
+            return buildErrorResponse(400, frame.action(), frame.requestId(), ProtocolErrorCode.MISSING_PARAMETER, "sessionId, deviceId, and targetDeviceId required");
+        }
+
+        Optional<Session> optSession = sessionRepository.findById(frame.sessionId());
+        if (optSession.isEmpty()) {
+            return buildErrorResponse(404, frame.action(), frame.requestId(), ProtocolErrorCode.SESSION_NOT_FOUND, "Session not found");
+        }
+
+        Session session = optSession.get();
+
+        Optional<Device> callerOpt = deviceRepository.findBySessionAndDeviceId(session.sessionId(), frame.deviceId());
+        if (callerOpt.isEmpty()) {
+            return buildErrorResponse(404, frame.action(), frame.requestId(), ProtocolErrorCode.DEVICE_NOT_FOUND, "Caller device not found");
+        }
+        if (callerOpt.get().status() == DeviceStatus.REVOKED) {
+            return buildErrorResponse(403, frame.action(), frame.requestId(), ProtocolErrorCode.DEVICE_REVOKED, "Caller device is revoked");
+        }
+
+        Optional<Device> targetOpt = deviceRepository.findBySessionAndDeviceId(session.sessionId(), frame.targetDeviceId());
+        if (targetOpt.isEmpty()) {
+            return buildErrorResponse(404, frame.action(), frame.requestId(), ProtocolErrorCode.DEVICE_NOT_FOUND, "Target device not found");
+        }
+
+        // 1. Mark target device revoked
+        deviceRepository.revokeDevice(session.sessionId(), frame.targetDeviceId());
+
+        // 2. Advance session keyEpoch
+        Session updatedSession = session.withIncrementedKeyEpoch();
+        sessionRepository.save(updatedSession);
+
+        // 3. Notify all connected peers and disconnect target device connections
+        List<Connection> peers = connectionRepository.findActiveBySessionId(session.sessionId());
+        ObjectNode notify = objectMapper.createObjectNode();
+        notify.put("v", 1);
+        notify.put("action", "device.revoked");
+        notify.put("sessionId", session.sessionId());
+        notify.put("revokedDeviceId", frame.targetDeviceId());
+        notify.put("keyEpoch", updatedSession.keyEpoch());
+        String notifyJson = notify.toString();
+
+        for (Connection peer : peers) {
+            webSocketSender.postToConnection(peer.connectionId(), notifyJson);
+            if (peer.deviceId().equals(frame.targetDeviceId())) {
+                connectionRepository.remove(peer.connectionId());
+            }
+        }
+
+        ObjectNode data = objectMapper.createObjectNode();
+        data.put("status", "REVOKED");
+        data.put("revokedDeviceId", frame.targetDeviceId());
+        data.put("keyEpoch", updatedSession.keyEpoch());
+
+        return buildOkResponse(frame.action(), frame.requestId(), data);
+    }
+
     private APIGatewayV2WebSocketResponse handleSignaling(String connectionId, WebSocketFrame frame, String rawBody) {
         if (frame.sessionId() == null || frame.targetDeviceId() == null) {
             return buildErrorResponse(400, frame.action(), frame.requestId(), ProtocolErrorCode.MISSING_PARAMETER, "sessionId and targetDeviceId required");
+        }
+
+        if (frame.deviceId() != null) {
+            Optional<Device> senderOpt = deviceRepository.findBySessionAndDeviceId(frame.sessionId(), frame.deviceId());
+            if (senderOpt.isPresent() && senderOpt.get().status() == DeviceStatus.REVOKED) {
+                return buildErrorResponse(403, frame.action(), frame.requestId(), ProtocolErrorCode.DEVICE_REVOKED, "Device has been revoked from session");
+            }
         }
 
         List<Connection> peers = connectionRepository.findActiveBySessionId(frame.sessionId());

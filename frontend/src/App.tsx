@@ -23,6 +23,8 @@ export const App: React.FC = () => {
     joinSession,
     closeSession,
     leaveSession,
+    revokeDevice,
+    dismissConflict,
   } = useClipSync()
 
   // Map state to legacy ConnectionState for badge styling
@@ -132,6 +134,8 @@ export const App: React.FC = () => {
               onJoinSession={joinSession}
               onLeaveSession={leaveSession}
               onCloseSession={closeSession}
+              onRevokeDevice={revokeDevice}
+              onDismissConflict={dismissConflict}
             />
 
             <div className="editor-toolbar">

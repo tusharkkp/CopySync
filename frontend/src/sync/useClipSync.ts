@@ -79,6 +79,24 @@ export function useClipSync(options: UseClipSyncOptions = {}) {
     await service.syncNow()
   }, [service])
 
+  const revokeDevice = useCallback(
+    async (targetDeviceId: string) => {
+      await service.revokeDevice(targetDeviceId)
+    },
+    [service]
+  )
+
+  const dismissConflict = useCallback(
+    (conflictId: string) => {
+      service.dismissConflict(conflictId)
+    },
+    [service]
+  )
+
+  const clearConflicts = useCallback(() => {
+    service.clearConflicts()
+  }, [service])
+
   return {
     content,
     setContent,
@@ -89,6 +107,9 @@ export function useClipSync(options: UseClipSyncOptions = {}) {
     closeSession,
     leaveSession,
     syncNow,
+    revokeDevice,
+    dismissConflict,
+    clearConflicts,
     service,
   }
 }

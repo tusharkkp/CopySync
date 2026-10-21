@@ -129,4 +129,22 @@ class FrameValidatorTest {
         WebSocketFrame resumeFrame = validator.validateJson(resumeJson);
         assertThat(resumeFrame.action()).isEqualTo("sync.resume");
     }
+
+    @Test
+    @DisplayName("Recognizes device.revoke action as valid")
+    void testPhase8Actions() {
+        String revokeJson = """
+            {
+              "v": 1,
+              "action": "device.revoke",
+              "requestId": "req-rev",
+              "sessionId": "sess-alpha",
+              "deviceId": "dev-01",
+              "targetDeviceId": "dev-02"
+            }
+            """;
+        WebSocketFrame revokeFrame = validator.validateJson(revokeJson);
+        assertThat(revokeFrame.action()).isEqualTo("device.revoke");
+        assertThat(revokeFrame.targetDeviceId()).isEqualTo("dev-02");
+    }
 }

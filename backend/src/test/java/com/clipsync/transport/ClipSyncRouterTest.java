@@ -427,4 +427,128 @@ class ClipSyncRouterTest {
         assertThat(pairingRepo.findBySessionId("sess-to-close")).isEmpty();
         assertThat(clipboardRepo.listRevisions(Session.createDefault("sess-to-close", StorageMode.TEMPORARY))).isEmpty();
     }
+
+    @Test
+    @DisplayName("ROUTE: device.revoke advances keyEpoch, disconnects target device, and broadcasts device.revoked")
+    void testDeviceRevokeAdvancesKeyEpochAndBlocksRevokedDevice() throws Exception {
+        // Connect initiator
+        router.handle(createEvent("$connect", "conn-init-rev", null));
+        String createBody = """
+            {
+              "v": 1,
+              "action": "session.create",
+              "requestId": "req-c1",
+              "sessionId": "sess-rev-test",
+              "deviceId": "dev-init-rev",
+              "publicSigningKeyB64": "sig-init",
+              "publicHpkeKeyB64": "hpke-init",
+              "storageMode": "TEMPORARY"
+            }
+            """;
+        APIGatewayV2WebSocketResponse createResp = router.handle(createEvent("session.create", "conn-init-rev", createBody));
+        WebSocketResponse createData = objectMapper.readValue(createResp.getBody(), WebSocketResponse.class);
+        String pairingCode = createData.data().get("pairingCode").asText();
+
+        // Connect joiner
+        router.handle(createEvent("$connect", "conn-joiner-rev", null));
+        String joinBody = String.format("""
+            {
+              "v": 1,
+              "action": "session.join",
+              "requestId": "req-j1",
+              "sessionId": "sess-rev-test",
+              "pairingCode": "%s",
+              "deviceId": "dev-joiner-rev",
+              "publicSigningKeyB64": "sig-join",
+              "publicHpkeKeyB64": "hpke-join"
+            }
+            """, pairingCode);
+        router.handle(createEvent("session.join", "conn-joiner-rev", joinBody));
+
+        // Both are active and connectionRepo has both
+        assertThat(connectionRepo.findByConnectionId("conn-joiner-rev")).isPresent();
+        assertThat(sessionRepo.findById("sess-rev-test").get().keyEpoch()).isEqualTo(1);
+
+        // Initiator revokes joiner
+        String revokeBody = """
+            {
+              "v": 1,
+              "action": "device.revoke",
+              "requestId": "req-rev-1",
+              "sessionId": "sess-rev-test",
+              "deviceId": "dev-init-rev",
+              "targetDeviceId": "dev-joiner-rev"
+            }
+            """;
+        APIGatewayV2WebSocketResponse revResp = router.handle(createEvent("device.revoke", "conn-init-rev", revokeBody));
+        assertThat(revResp.getStatusCode()).isEqualTo(200);
+
+        WebSocketResponse revData = objectMapper.readValue(revResp.getBody(), WebSocketResponse.class);
+        assertThat(revData.data().get("status").asText()).isEqualTo("REVOKED");
+        assertThat(revData.data().get("revokedDeviceId").asText()).isEqualTo("dev-joiner-rev");
+        assertThat(revData.data().get("keyEpoch").asInt()).isEqualTo(2);
+
+        // Session keyEpoch is now 2
+        assertThat(sessionRepo.findById("sess-rev-test").get().keyEpoch()).isEqualTo(2);
+
+        // Joiner status is REVOKED
+        assertThat(deviceRepo.findBySessionAndDeviceId("sess-rev-test", "dev-joiner-rev").get().status())
+            .isEqualTo(com.clipsync.device.DeviceStatus.REVOKED);
+
+        // Joiner connection was pruned
+        assertThat(connectionRepo.findByConnectionId("conn-joiner-rev")).isEmpty();
+
+        // Verify broadcast device.revoked was sent
+        assertThat(sender.getSentMessages("conn-init-rev")).anyMatch(msg -> msg.contains("device.revoked"));
+
+        // Joiner attempts clipboard update -> rejected 403 DEVICE_REVOKED
+        String joinerUpdate = """
+            {
+              "v": 1,
+              "action": "clipboard.update",
+              "requestId": "req-up-bad",
+              "sessionId": "sess-rev-test",
+              "deviceId": "dev-joiner-rev",
+              "header": {"sessionId": "sess-rev-test", "messageId": "msg-002", "senderDeviceId": "dev-joiner-rev", "baseRevisionId": "", "logicalClock": 2, "keyEpoch": 2, "contentType": "text/plain", "plaintextBytes": 5},
+              "payload": {"algorithm": "A256GCM", "nonce": "n2", "ciphertext": "c2"},
+              "snapshotSignature": "s2",
+              "keyEnvelopes": []
+            }
+            """;
+        APIGatewayV2WebSocketResponse upResp = router.handle(createEvent("clipboard.update", "conn-joiner-rev", joinerUpdate));
+        assertThat(upResp.getStatusCode()).isEqualTo(403);
+        assertThat(upResp.getBody()).contains("DEVICE_REVOKED");
+
+        // Initiator attempts update with stale keyEpoch 1 -> rejected 403 UNAUTHORIZED
+        String staleEpochUpdate = """
+            {
+              "v": 1,
+              "action": "clipboard.update",
+              "requestId": "req-up-stale",
+              "sessionId": "sess-rev-test",
+              "deviceId": "dev-init-rev",
+              "header": {"sessionId": "sess-rev-test", "messageId": "msg-003", "senderDeviceId": "dev-init-rev", "baseRevisionId": "", "logicalClock": 2, "keyEpoch": 1, "contentType": "text/plain", "plaintextBytes": 5},
+              "payload": {"algorithm": "A256GCM", "nonce": "n3", "ciphertext": "c3"},
+              "snapshotSignature": "s3",
+              "keyEnvelopes": []
+            }
+            """;
+        APIGatewayV2WebSocketResponse staleResp = router.handle(createEvent("clipboard.update", "conn-init-rev", staleEpochUpdate));
+        assertThat(staleResp.getStatusCode()).isEqualTo(403);
+        assertThat(staleResp.getBody()).contains("UNAUTHORIZED");
+
+        // Joiner attempts sync.resume -> rejected 403 DEVICE_REVOKED
+        String resumeBody = """
+            {
+              "v": 1,
+              "action": "sync.resume",
+              "requestId": "req-res-rev",
+              "sessionId": "sess-rev-test",
+              "deviceId": "dev-joiner-rev"
+            }
+            """;
+        APIGatewayV2WebSocketResponse resResp = router.handle(createEvent("sync.resume", "conn-joiner-rev", resumeBody));
+        assertThat(resResp.getStatusCode()).isEqualTo(403);
+        assertThat(resResp.getBody()).contains("DEVICE_REVOKED");
+    }
 }

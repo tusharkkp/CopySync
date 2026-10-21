@@ -344,4 +344,188 @@ describe('SYNC: ClipSyncService Domain Suite', () => {
     expect(state.revisions.length).toBe(2)
     expect(state.logicalClock).toBe(4)
   })
+
+  it('queues updates in pendingQueue when offline and flushes on reconnect', async () => {
+    // 1. Establish paired session
+    await service.createSession('ephemeral')
+    const createReq = JSON.parse(mockWs.sentData[0])
+    await service.handleInboundMessage({
+      status: 'OK',
+      action: 'session.create',
+      data: { sessionId: createReq.sessionId, pairingCode: '999888', keyEpoch: 1 },
+    })
+
+    const peerKeys = await cryptoProvider.generateDeviceKeys('dev-peer-02')
+    await service.handleInboundMessage({
+      v: 1,
+      action: 'peer.joined',
+      deviceId: 'dev-peer-02',
+      publicSigningKeyB64: peerKeys.publicSigningKeyB64,
+      publicHpkeKeyB64: peerKeys.publicHpkeKeyB64,
+    })
+    expect(service.getState().phase).toBe('paired')
+
+    // 2. Go offline
+    mockWs.close()
+    mockWs.sentData = []
+    expect(wsClient.getStatus()).not.toBe('connected')
+
+    // 3. Edit clipboard while offline
+    service.setContentFromLocal('Offline Secret Keystrokes', true)
+    await vi.waitFor(() => {
+      expect(service.getState().pendingQueueLength).toBe(1)
+    })
+    expect(mockWs.sentData.length).toBe(0)
+
+    // 4. Reconnect transport
+    wsClient.connect()
+    const newMockWs = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+    if (newMockWs.onopen) newMockWs.onopen()
+
+    await vi.waitFor(() => {
+      expect(service.getState().pendingQueueLength).toBe(0)
+      expect(newMockWs.sentData.length).toBeGreaterThan(0)
+    })
+    const sent = JSON.parse(newMockWs.sentData[0])
+    expect(sent.action).toBe('clipboard.update')
+  })
+
+  it('rejects inbound updates with malicious forward clock drift (>10,000)', async () => {
+    await service.createSession('ephemeral')
+    const createReq = JSON.parse(mockWs.sentData[0])
+    mockWs.simulateMessage({
+      status: 'OK',
+      action: 'session.create',
+      data: { sessionId: createReq.sessionId, pairingCode: '999888', keyEpoch: 1 },
+    })
+
+    const peerKeys = await cryptoProvider.generateDeviceKeys('dev-peer-evil')
+    mockWs.simulateMessage({
+      action: 'peer.joined',
+      deviceId: 'dev-peer-evil',
+      publicSigningKeyB64: peerKeys.publicSigningKeyB64,
+      publicHpkeKeyB64: peerKeys.publicHpkeKeyB64,
+    })
+
+    const localKeys = await service.initKeys()
+    const evilHeader = {
+      sessionId: createReq.sessionId,
+      messageId: 'msg-evil-1',
+      senderDeviceId: 'dev-peer-evil',
+      baseRevisionId: '',
+      logicalClock: 999999, // Way beyond 10,000 clock drift
+      keyEpoch: 1,
+      contentType: 'text/plain;charset=utf-8',
+      plaintextBytes: 15,
+    }
+
+    const wireMsg = await cryptoProvider.encryptSnapshot(
+      'Spoofed text',
+      evilHeader,
+      { [localKeys.deviceId]: { deviceId: localKeys.deviceId, publicSigningKeyB64: localKeys.publicSigningKeyB64, publicHpkeKeyB64: localKeys.publicHpkeKeyB64 } },
+      peerKeys,
+      'clipboard.update'
+    )
+
+    await service.handleInboundMessage({ ...wireMsg, sessionId: createReq.sessionId })
+    expect(service.getContent()).not.toBe('Spoofed text')
+    expect(service.getState().logicalClock).toBe(0)
+  })
+
+  it('preserves losing concurrent edit in conflicts list (DEC-016)', async () => {
+    await service.createSession('ephemeral')
+    const createReq = JSON.parse(mockWs.sentData[0])
+    mockWs.simulateMessage({
+      status: 'OK',
+      action: 'session.create',
+      data: { sessionId: createReq.sessionId, pairingCode: '999888', keyEpoch: 1 },
+    })
+
+    // Local device is 'dev-laptop-01'
+    // Peer device is 'dev-aaa-01' (lexicographically smaller than 'dev-laptop-01')
+    const peerKeys = await cryptoProvider.generateDeviceKeys('dev-aaa-01')
+    mockWs.simulateMessage({
+      action: 'peer.joined',
+      deviceId: 'dev-aaa-01',
+      publicSigningKeyB64: peerKeys.publicSigningKeyB64,
+      publicHpkeKeyB64: peerKeys.publicHpkeKeyB64,
+    })
+
+    // Local writes "Local Note" at logicalClock = 1
+    service.setContentFromLocal('Local Note', true)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(service.getState().logicalClock).toBe(1)
+
+    // Inbound arrives from 'dev-aaa-01' also at logicalClock = 1 with "Remote Note"
+    // Since 'dev-aaa-01' < 'dev-laptop-01', inbound loses tie-breaker!
+    const localKeys = await service.initKeys()
+    const peerHeader = {
+      sessionId: createReq.sessionId,
+      messageId: 'msg-remote-1',
+      senderDeviceId: 'dev-aaa-01',
+      baseRevisionId: '',
+      logicalClock: 1,
+      keyEpoch: 1,
+      contentType: 'text/plain;charset=utf-8',
+      plaintextBytes: 11,
+    }
+
+    const wireMsg = await cryptoProvider.encryptSnapshot(
+      'Remote Note',
+      peerHeader,
+      { [localKeys.deviceId]: { deviceId: localKeys.deviceId, publicSigningKeyB64: localKeys.publicSigningKeyB64, publicHpkeKeyB64: localKeys.publicHpkeKeyB64 } },
+      peerKeys,
+      'clipboard.update'
+    )
+
+    await service.handleInboundMessage({ ...wireMsg, sessionId: createReq.sessionId })
+
+    // Local kept its text
+    expect(service.getContent()).toBe('Local Note')
+    // Inbound preserved in conflicts list
+    const state = service.getState()
+    expect(state.conflicts.length).toBe(1)
+    expect(state.conflicts[0].plaintext).toBe('Remote Note')
+    expect(state.conflicts[0].conflictId).toContain('CONFLICT#1#msg-remote-1')
+  })
+
+  it('revokes device and leaves session if local device was revoked', async () => {
+    await service.createSession('ephemeral')
+    const createReq = JSON.parse(mockWs.sentData[0])
+    mockWs.simulateMessage({
+      status: 'OK',
+      action: 'session.create',
+      data: { sessionId: createReq.sessionId, pairingCode: '999888', keyEpoch: 1 },
+    })
+
+    mockWs.simulateMessage({
+      action: 'peer.joined',
+      deviceId: 'dev-to-revoke',
+      publicSigningKeyB64: 'sig-test',
+      publicHpkeKeyB64: 'hpke-test',
+    })
+    expect(service.getState().peers['dev-to-revoke']).toBeDefined()
+
+    mockWs.sentData = []
+    await service.revokeDevice('dev-to-revoke')
+    expect(mockWs.sentData.length).toBe(1)
+    const revokeSent = JSON.parse(mockWs.sentData[0])
+    expect(revokeSent.action).toBe('device.revoke')
+    expect(revokeSent.targetDeviceId).toBe('dev-to-revoke')
+
+    // Peer removed and epoch advanced
+    expect(service.getState().peers['dev-to-revoke']).toBeUndefined()
+    expect(service.getState().keyEpoch).toBe(2)
+
+    // Simulate inbound broadcast that local device has been revoked
+    mockWs.simulateMessage({
+      action: 'device.revoked',
+      revokedDeviceId: 'dev-laptop-01',
+      keyEpoch: 3,
+    })
+
+    const finalState = service.getState()
+    expect(finalState.phase).toBe('unpaired')
+    expect(finalState.error).toContain('revoked')
+  })
 })

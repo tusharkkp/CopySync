@@ -24,7 +24,8 @@ public class FrameValidator {
         "signaling.answer",
         "signaling.ice",
         "session.close",
-        "sync.resume"
+        "sync.resume",
+        "device.revoke"
     );
 
     private final ObjectMapper objectMapper;

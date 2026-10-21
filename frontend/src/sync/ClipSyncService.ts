@@ -24,6 +24,16 @@ export interface HistoryRevision {
   keyEnvelopesJson: string
 }
 
+export interface ConflictRecord {
+  conflictId: string
+  messageId: string
+  senderDeviceId: string
+  logicalClock: number
+  timestamp: number
+  baseRevisionId?: string
+  plaintext: string
+}
+
 export interface ClipSyncState {
   deviceId: string
   connectionStatus: WebSocketStatus
@@ -41,6 +51,9 @@ export interface ClipSyncState {
   error: string | null
   transportMode: TransportMode
   webrtcStatus: WebRtcState
+  pendingQueueLength: number
+  conflicts: ConflictRecord[]
+  keyEpoch: number
 }
 
 export type StateListener = (state: ClipSyncState) => void
@@ -69,6 +82,12 @@ export class ClipSyncService {
   private transportMode: TransportMode = 'relay'
   private webrtcStatus: WebRtcState = 'idle'
   private webRtcManager: WebRtcManager | null = null
+
+  // Phase 8: Offline Queue, Conflicts, Key Epoch
+  private keyEpoch = 1
+  private conflicts: ConflictRecord[] = []
+  private pendingQueue: { wireFrame: Record<string, unknown>; content: string; header: SnapshotHeader }[] = []
+  private lastSyncedMessageId: string | null = null
 
   private content = ''
   private lastSyncedContent = ''
@@ -121,6 +140,9 @@ export class ClipSyncService {
       error: this.error,
       transportMode: this.transportMode,
       webrtcStatus: this.webrtcStatus,
+      pendingQueueLength: this.pendingQueue.length,
+      conflicts: [...this.conflicts],
+      keyEpoch: this.keyEpoch,
     }
   }
 
@@ -265,7 +287,64 @@ export class ClipSyncService {
     this.revisions = []
     this.phase = 'unpaired'
     this.error = null
+    this.pendingQueue = []
+    this.conflicts = []
+    this.keyEpoch = 1
+    this.lastSyncedMessageId = null
     this.clearDebounceTimers()
+    this.notifyState()
+  }
+
+  public async revokeDevice(targetDeviceId: string): Promise<void> {
+    if (!this.sessionId) {
+      throw new Error('No active session to revoke device from')
+    }
+    const requestId = 'req-rev-' + Date.now()
+    const frame = {
+      v: 1,
+      action: 'device.revoke',
+      requestId,
+      sessionId: this.sessionId,
+      deviceId: this.deviceId,
+      targetDeviceId,
+    }
+    delete this.peers[targetDeviceId]
+    this.keyEpoch += 1
+    this.notifyState()
+    this.wsClient.send(frame)
+  }
+
+  public async flushPendingQueue(): Promise<void> {
+    if (this.pendingQueue.length === 0) return
+    const queue = [...this.pendingQueue]
+    this.pendingQueue = []
+
+    for (const item of queue) {
+      let sent = false
+      if (this.webRtcManager && this.webRtcManager.isOpen()) {
+        sent = this.webRtcManager.send(JSON.stringify(item.wireFrame))
+        if (sent) this.transportMode = 'direct'
+      }
+      if (!sent) {
+        sent = this.wsClient.send(item.wireFrame)
+        if (sent) this.transportMode = 'relay'
+      }
+      if (!sent) {
+        // Re-queue remaining items if transport dropped again
+        this.pendingQueue.unshift(item)
+        break
+      }
+    }
+    this.notifyState()
+  }
+
+  public dismissConflict(conflictId: string): void {
+    this.conflicts = this.conflicts.filter((c) => c.conflictId !== conflictId)
+    this.notifyState()
+  }
+
+  public clearConflicts(): void {
+    this.conflicts = []
     this.notifyState()
   }
 
@@ -328,7 +407,7 @@ export class ClipSyncService {
       senderDeviceId: this.deviceId,
       baseRevisionId: '',
       logicalClock: this.logicalClock,
-      keyEpoch: 1,
+      keyEpoch: this.keyEpoch,
       contentType: 'text/plain;charset=utf-8',
       plaintextBytes: textBytes,
     }
@@ -362,26 +441,36 @@ export class ClipSyncService {
       // Fall back to WebSocket relay if direct path is not open
       if (!sent) {
         sent = this.wsClient.send(wireFrame as unknown as Record<string, unknown>)
-        this.transportMode = 'relay'
+        if (sent) {
+          this.transportMode = 'relay'
+        }
       }
 
-      if (sent) {
-        this.lastSyncedContent = this.content
-        this.lastSyncedAt = new Date()
-        if (this.storageMode === 'history') {
-          this.revisions = [
-            ...this.revisions,
-            {
-              messageId: header.messageId,
-              logicalClock: header.logicalClock,
-              createdAt: new Date().toISOString(),
-              payloadCiphertext: wireMsg.payload.ciphertext,
-              payloadNonce: wireMsg.payload.nonce,
-              snapshotSignature: wireMsg.snapshotSignature,
-              keyEnvelopesJson: JSON.stringify(wireMsg.keyEnvelopes),
-            },
-          ]
-        }
+      if (!sent) {
+        // Offline Queuing (Phase 8): Store for auto-flush on reconnection
+        this.pendingQueue.push({
+          wireFrame: wireFrame as unknown as Record<string, unknown>,
+          content: this.content,
+          header,
+        })
+      }
+
+      this.lastSyncedContent = this.content
+      this.lastSyncedMessageId = header.messageId
+      this.lastSyncedAt = new Date()
+      if (this.storageMode === 'history') {
+        this.revisions = [
+          ...this.revisions,
+          {
+            messageId: header.messageId,
+            logicalClock: header.logicalClock,
+            createdAt: new Date().toISOString(),
+            payloadCiphertext: wireMsg.payload.ciphertext,
+            payloadNonce: wireMsg.payload.nonce,
+            snapshotSignature: wireMsg.snapshotSignature,
+            keyEnvelopesJson: JSON.stringify(wireMsg.keyEnvelopes),
+          },
+        ]
       }
     } catch (err: unknown) {
       console.error('[ClipSyncService] Encryption / sync failed:', err)
@@ -426,7 +515,10 @@ export class ClipSyncService {
   }
 
   private initWebSocketListeners(): void {
-    this.unsubscribeWsStatus = this.wsClient.onStatusChange(() => {
+    this.unsubscribeWsStatus = this.wsClient.onStatusChange((status) => {
+      if (status === 'connected') {
+        void this.flushPendingQueue()
+      }
       this.notifyState()
     })
 
@@ -444,6 +536,9 @@ export class ClipSyncService {
       const data = msg.data as Record<string, unknown>
       this.sessionId = (data.sessionId as string) || this.sessionId
       this.pairingCode = data.pairingCode as string
+      if (typeof data.keyEpoch === 'number') {
+        this.keyEpoch = data.keyEpoch
+      }
       if (typeof data.retentionDays === 'number') {
         this.retentionDays = data.retentionDays
       }
@@ -458,6 +553,12 @@ export class ClipSyncService {
     // 2. Inbound session.join acknowledgement
     if (action === 'session.join') {
       if (status === 'OK') {
+        if (msg.data) {
+          const data = msg.data as Record<string, unknown>
+          if (typeof data.keyEpoch === 'number') {
+            this.keyEpoch = data.keyEpoch
+          }
+        }
         this.phase = 'paired'
         this.notifyState()
       } else {
@@ -527,7 +628,44 @@ export class ClipSyncService {
       return
     }
 
-    // 5. Inbound clipboard.update payload
+    // 5. Inbound device.revoke acknowledgement
+    if (action === 'device.revoke' && status === 'OK' && msg.data) {
+      const data = msg.data as Record<string, unknown>
+      if (typeof data.keyEpoch === 'number') {
+        this.keyEpoch = data.keyEpoch
+      }
+      const revokedId = data.revokedDeviceId as string
+      if (revokedId && this.peers[revokedId]) {
+        delete this.peers[revokedId]
+      }
+      this.notifyState()
+      return
+    }
+
+    // 6. Inbound device.revoked broadcast
+    if (action === 'device.revoked') {
+      const revokedDeviceId = msg.revokedDeviceId as string
+      const newEpoch = msg.keyEpoch as number | undefined
+      if (typeof newEpoch === 'number') {
+        this.keyEpoch = newEpoch
+      }
+
+      if (revokedDeviceId === this.deviceId) {
+        // Local device has been revoked from session!
+        this.leaveSession()
+        this.error = 'This device has been revoked from the session'
+        this.notifyState()
+        return
+      }
+
+      if (revokedDeviceId && this.peers[revokedDeviceId]) {
+        delete this.peers[revokedDeviceId]
+      }
+      this.notifyState()
+      return
+    }
+
+    // 7. Inbound clipboard.update payload
     if (action === 'clipboard.update' && msg.header && msg.payload) {
       const wireMsg = msg as unknown as WireMessage
       const senderDeviceId = wireMsg.header.senderDeviceId
@@ -537,14 +675,22 @@ export class ClipSyncService {
         return
       }
 
+      // Check keyEpoch: reject updates with keyEpoch < local keyEpoch (stale epoch)
+      if (typeof wireMsg.header.keyEpoch === 'number' && wireMsg.header.keyEpoch < this.keyEpoch) {
+        console.warn(`[ClipSyncService] Stale keyEpoch rejected: ${wireMsg.header.keyEpoch} < ${this.keyEpoch}`)
+        return
+      }
+
       // Duplicate suppression across paths (SEC-14 / Phase 6)
       if (wireMsg.header.messageId && !this.markMessageProcessed(wireMsg.header.messageId)) {
         return
       }
 
-      // Logical clock verification: reject older or equal revision if already applied
-      if (wireMsg.header.logicalClock <= this.logicalClock && this.content === this.lastSyncedContent) {
-        // Already processed or stale
+      // Malicious Clock Bounds (DEC-016): updates with clock drift > 10,000 above local clock are rejected
+      if (wireMsg.header.logicalClock - this.logicalClock > SYNC_CONFIG.MAX_CLOCK_DRIFT) {
+        console.warn(
+          `[ClipSyncService] Malicious clock drift rejected: inbound ${wireMsg.header.logicalClock} vs local ${this.logicalClock}`
+        )
         return
       }
 
@@ -567,10 +713,72 @@ export class ClipSyncService {
           senderPeer.publicSigningKeyB64
         )
 
-        this.content = decryptedText
-        this.lastSyncedContent = decryptedText
-        this.logicalClock = Math.max(this.logicalClock, wireMsg.header.logicalClock)
-        this.lastSyncedAt = new Date()
+        const inboundClock = wireMsg.header.logicalClock
+        const inboundSender = senderDeviceId
+        const inboundMsgId = wireMsg.header.messageId
+
+        // Deterministic LWW Conflict Resolution (DEC-016):
+        // Tuple: (logicalClock, senderDeviceId, messageId)
+        let inboundWins = false
+        if (inboundClock > this.logicalClock) {
+          inboundWins = true
+        } else if (inboundClock < this.logicalClock) {
+          inboundWins = false
+        } else {
+          const devCmp = inboundSender.localeCompare(this.deviceId)
+          if (devCmp > 0) {
+            inboundWins = true
+          } else if (devCmp < 0) {
+            inboundWins = false
+          } else {
+            inboundWins = inboundMsgId.localeCompare(this.lastSyncedMessageId || '') > 0
+          }
+        }
+
+        if (inboundWins) {
+          // If local has concurrent, uncommitted, or pending queued edits differing from inbound:
+          // Preserve superseded local revision in conflicts (no silent data loss)
+          if (
+            this.content &&
+            this.content !== decryptedText &&
+            (inboundClock === this.logicalClock ||
+              this.content !== this.lastSyncedContent ||
+              this.pendingQueue.length > 0)
+          ) {
+            this.conflicts.unshift({
+              conflictId: `CONFLICT#${this.logicalClock}#${this.deviceId}`,
+              messageId: this.lastSyncedMessageId || `local-${Date.now()}`,
+              senderDeviceId: this.deviceId,
+              logicalClock: this.logicalClock,
+              timestamp: Date.now(),
+              plaintext: this.content,
+            })
+          }
+
+          this.content = decryptedText
+          this.lastSyncedContent = decryptedText
+          this.lastSyncedMessageId = inboundMsgId
+          this.logicalClock = Math.max(this.logicalClock, inboundClock)
+          this.lastSyncedAt = new Date()
+          this.notifyContent()
+        } else {
+          // Inbound loses tie-break:
+          // If content differs from local, preserve losing inbound revision in conflicts list
+          if (decryptedText !== this.content) {
+            this.conflicts.unshift({
+              conflictId: `CONFLICT#${inboundClock}#${inboundMsgId}`,
+              messageId: inboundMsgId,
+              senderDeviceId: inboundSender,
+              logicalClock: inboundClock,
+              timestamp: Date.now(),
+              baseRevisionId: wireMsg.header.baseRevisionId,
+              plaintext: decryptedText,
+            })
+          }
+          // Observe inbound clock to preserve Lamport monotonicity
+          this.logicalClock = Math.max(this.logicalClock, inboundClock)
+        }
+
         if (this.storageMode === 'history') {
           this.revisions = [
             ...this.revisions,
@@ -585,7 +793,6 @@ export class ClipSyncService {
             },
           ]
         }
-        this.notifyContent()
       } catch (err: unknown) {
         console.error('[ClipSyncService] Inbound verification failed:', err)
         this.error = 'Decryption failed: signature or ciphertext mismatch'
