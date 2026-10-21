@@ -111,7 +111,7 @@ export const App: React.FC = () => {
           <div className="header-brand">
             <div className="brand-wordmark">
               <span className="brand-logo" aria-hidden="true">⚡</span>
-              <h1 className="brand-name">ClipSync</h1>
+              <h1 className="brand-name">Control CV Sync</h1>
             </div>
             <AnimatedBadge>
               <span className="badge-preview">E2EE Preview</span>
