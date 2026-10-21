@@ -99,6 +99,7 @@ Resources:
       # stage throttling (10 rps / 20 burst) per DEC-013.
       Environment:
         Variables:
+          MAIN_CLASS: com.clipsync.ClipSyncApplication
           SPRING_CLOUD_FUNCTION_DEFINITION: clipSyncWebSocketHandler
           CLIPSYNC_DYNAMODB_TABLE_REGISTRY: !Ref RegistryTable
           CLIPSYNC_DYNAMODB_TABLE_CLIPBOARD: !Ref ClipboardTable
