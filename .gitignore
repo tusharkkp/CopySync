@@ -48,3 +48,14 @@ playwright-report/
 *.sw?
 .DS_Store
 Thumbs.db
+
+# Local Project Documentation and Notes (Kept locally, excluded from Git)
+/docs/
+/AGENT.md
+/AUTOMATED_VERIFICATION_LOOPS.md
+/AWS_PHASE0_BOOTSTRAP.md
+/LOOP_INSTRUCTIONS.md
+/MASTER_PROMPT.md
+/PROGRESS.md
+/RECOMMENDED_WORKFLOW.md
+/SKILLS.md
