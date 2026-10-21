@@ -203,6 +203,11 @@ public class ClipSyncRouter {
             return buildErrorResponse(401, frame.action(), frame.requestId(), ProtocolErrorCode.INVALID_PAIRING_CODE, "Invalid or expired pairing code");
         }
 
+        ObjectNode data = objectMapper.createObjectNode();
+        data.put("sessionId", session.sessionId());
+        data.put("status", "ACTIVE");
+        data.put("keyEpoch", session.keyEpoch());
+
         // Register joiner device
         if (frame.deviceId() != null && frame.publicSigningKeyB64() != null && frame.publicHpkeKeyB64() != null) {
             Device joiner = new Device(
@@ -221,7 +226,7 @@ public class ClipSyncRouter {
                 connectionRepository.save(new Connection(connectionId, frame.sessionId(), frame.deviceId(), Instant.now(), ttl));
             }
 
-            // Notify peers in the session that a new device has joined
+            // 1. Notify existing peers in the session that a new device has joined
             List<Connection> peers = connectionRepository.findActiveBySessionId(frame.sessionId());
             ObjectNode notify = objectMapper.createObjectNode();
             notify.put("v", 1);
@@ -236,12 +241,21 @@ public class ClipSyncRouter {
                     webSocketSender.postToConnection(p.connectionId(), notifyJson);
                 }
             }
-        }
 
-        ObjectNode data = objectMapper.createObjectNode();
-        data.put("sessionId", session.sessionId());
-        data.put("status", "ACTIVE");
-        data.put("keyEpoch", session.keyEpoch());
+            // 2. Also send all existing active peers in the join response data
+            List<Device> activeDevices = deviceRepository.findActiveDevices(frame.sessionId());
+            ArrayNode peersArray = objectMapper.createArrayNode();
+            for (Device d : activeDevices) {
+                if (!d.deviceId().equals(frame.deviceId()) && d.status() == DeviceStatus.ACTIVE) {
+                    ObjectNode dNode = objectMapper.createObjectNode();
+                    dNode.put("deviceId", d.deviceId());
+                    dNode.put("publicSigningKeyB64", d.publicSigningKeyB64());
+                    dNode.put("publicHpkeKeyB64", d.publicHpkeKeyB64());
+                    peersArray.add(dNode);
+                }
+            }
+            data.set("peers", peersArray);
+        }
 
         return buildOkResponse(frame.action(), frame.requestId(), data);
     }

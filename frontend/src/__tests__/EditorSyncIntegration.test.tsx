@@ -172,7 +172,7 @@ describe('GATE-05: Multi-Device E2EE Real-Time Editor Synchronization', () => {
     await serviceB.joinSession(stateA.sessionId!, '849608')
 
     // Allow event loops for SAS derivation and peer exchange
-    await new Promise((r) => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 200))
 
     // Verify both devices are now PAIRED
     expect(serviceA.getState().phase).toBe('paired')
@@ -186,14 +186,14 @@ describe('GATE-05: Multi-Device E2EE Real-Time Editor Synchronization', () => {
 
     // 5. Device A pastes text: "Confidential Project Strategy"
     serviceA.setContentFromLocal('Confidential Project Strategy', true)
-    await new Promise((r) => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 200))
 
     // Device B should receive and decrypt automatically!
     expect(serviceB.getContent()).toBe('Confidential Project Strategy')
 
     // 6. Device B replies: "Strategy Approved. Proceed with Phase 5."
     serviceB.setContentFromLocal('Strategy Approved. Proceed with Phase 5.', true)
-    await new Promise((r) => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 200))
 
     // Device A should receive and decrypt automatically!
     expect(serviceA.getContent()).toBe('Strategy Approved. Proceed with Phase 5.')

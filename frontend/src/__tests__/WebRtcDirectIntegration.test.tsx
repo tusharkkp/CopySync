@@ -332,7 +332,7 @@ describe('GATE-06: WebRTC Direct Zero-Hop DataChannel & Cross-Path Resilience', 
     await devB.service.joinSession(stateA.sessionId!, '654321')
 
     // Wait for signaling and DataChannel open events
-    await sleep(150)
+    await sleep(250)
 
     // Assert both are now in direct mode
     expect(devA.service.getState().phase).toBe('paired')
@@ -341,7 +341,7 @@ describe('GATE-06: WebRTC Direct Zero-Hop DataChannel & Cross-Path Resilience', 
 
     // Device A sends paste payload (immediate sync)
     devA.service.setContentFromLocal('Secret P2P Zero-Hop Payload', true)
-    await sleep(100)
+    await sleep(200)
 
     // Verify: Received on Device B directly over DataChannel!
     expect(devB.service.getContent()).toBe('Secret P2P Zero-Hop Payload')

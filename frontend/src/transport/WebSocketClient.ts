@@ -68,6 +68,52 @@ export class WebSocketClient {
     }
   }
 
+  public async ensureConnected(timeoutMs = 10000): Promise<void> {
+    if (this.status === 'connected' || this.ws?.readyState === 1) {
+      if (this.status !== 'connected' && this.ws?.readyState === 1) {
+        this.setStatus('connected')
+      }
+      return
+    }
+
+    if (this.status !== 'connecting' && this.status !== 'reconnecting') {
+      this.connect()
+    }
+
+    if (this.ws?.readyState === 1) {
+      this.setStatus('connected')
+      return
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      if (this.status === 'connected' || this.ws?.readyState === 1) {
+        if (this.status !== 'connected') this.setStatus('connected')
+        resolve()
+        return
+      }
+
+      let timer: ReturnType<typeof setTimeout> | null = null
+      let unsub: (() => void) | null = null
+
+      timer = setTimeout(() => {
+        if (unsub) unsub()
+        reject(
+          new Error(
+            `WebSocket connection timed out after ${timeoutMs}ms (current status: ${this.status})`
+          )
+        )
+      }, timeoutMs)
+
+      unsub = this.onStatusChange((status) => {
+        if (status === 'connected' || this.ws?.readyState === 1) {
+          if (timer) clearTimeout(timer)
+          if (unsub) unsub()
+          resolve()
+        }
+      })
+    })
+  }
+
   public connect(urlOverride?: string): void {
     if (urlOverride) {
       this.url = urlOverride

@@ -30,6 +30,7 @@ export function useClipSync(options: UseClipSyncOptions = {}) {
   )
 
   useEffect(() => {
+    service.connect()
     const unsubState = service.onStateChange((s) => setState(s))
     const unsubContent = service.onContentChange((c) => setContentState(c))
 

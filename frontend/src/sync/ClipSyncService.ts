@@ -167,9 +167,7 @@ export class ClipSyncService {
 
     try {
       const keys = await this.initKeys()
-      if (this.wsClient.getStatus() !== 'connected') {
-        this.wsClient.connect()
-      }
+      await this.wsClient.ensureConnected()
 
       const generatedSessionId = 'sess-' + Math.floor(1000000 + Math.random() * 9000000)
       this.sessionId = generatedSessionId
@@ -203,9 +201,7 @@ export class ClipSyncService {
 
     try {
       const keys = await this.initKeys()
-      if (this.wsClient.getStatus() !== 'connected') {
-        this.wsClient.connect()
-      }
+      await this.wsClient.ensureConnected()
 
       const requestId = 'req-j-' + Date.now()
       const joinFrame = {
@@ -237,9 +233,7 @@ export class ClipSyncService {
 
     try {
       await this.initKeys()
-      if (this.wsClient.getStatus() !== 'connected') {
-        this.wsClient.connect()
-      }
+      await this.wsClient.ensureConnected()
 
       const requestId = 'req-r-' + Date.now()
       const resumeFrame = {
@@ -261,6 +255,7 @@ export class ClipSyncService {
 
   public async closeSession(): Promise<void> {
     if (this.sessionId) {
+      await this.wsClient.ensureConnected().catch(() => {})
       const closeFrame = {
         v: 1,
         action: 'session.close',
@@ -295,10 +290,21 @@ export class ClipSyncService {
     this.notifyState()
   }
 
+  public connect(): void {
+    if (this.wsClient.getStatus() !== 'connected') {
+      this.wsClient.connect()
+    }
+  }
+
+  public async ensureConnected(): Promise<void> {
+    await this.wsClient.ensureConnected()
+  }
+
   public async revokeDevice(targetDeviceId: string): Promise<void> {
     if (!this.sessionId) {
       throw new Error('No active session to revoke device from')
     }
+    await this.wsClient.ensureConnected().catch(() => {})
     const requestId = 'req-rev-' + Date.now()
     const frame = {
       v: 1,
@@ -557,6 +563,31 @@ export class ClipSyncService {
           const data = msg.data as Record<string, unknown>
           if (typeof data.keyEpoch === 'number') {
             this.keyEpoch = data.keyEpoch
+          }
+          if (Array.isArray(data.peers)) {
+            for (const p of data.peers as Record<string, unknown>[]) {
+              const pDevId = p.deviceId as string
+              const pSig = p.publicSigningKeyB64 as string
+              const pHpke = p.publicHpkeKeyB64 as string
+              if (pDevId && pSig && pHpke && pDevId !== this.deviceId) {
+                this.peers[pDevId] = {
+                  deviceId: pDevId,
+                  publicSigningKeyB64: pSig,
+                  publicHpkeKeyB64: pHpke,
+                }
+                const isInitiator = this.deviceId < pDevId
+                this.setupWebRtc(pDevId, isInitiator)
+                if (this.sessionId && this.deviceKeys) {
+                  void this.cryptoProvider
+                    .deriveSAS(this.sessionId, this.deviceKeys.publicSigningKeyB64, pSig)
+                    .then((sas) => {
+                      this.sas = sas
+                      this.notifyState()
+                    })
+                    .catch(() => {})
+                }
+              }
+            }
           }
         }
         this.phase = 'paired'
