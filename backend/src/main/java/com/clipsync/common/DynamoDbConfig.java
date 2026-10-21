@@ -80,4 +80,55 @@ public class DynamoDbConfig {
     public ClipboardRepository clipboardRepository(DynamoDbClient client) {
         return new DynamoDbClipboardRepository(client);
     }
+
+    @Value("${clipsync.apigateway.endpoint:}")
+    private String apiGatewayEndpoint;
+
+    @Bean
+    public com.fasterxml.jackson.databind.ObjectMapper objectMapper() {
+        return new com.fasterxml.jackson.databind.ObjectMapper();
+    }
+
+    @Bean
+    public com.clipsync.transport.validation.FrameValidator frameValidator(com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+        return new com.clipsync.transport.validation.FrameValidator(objectMapper);
+    }
+
+    @Bean
+    public com.clipsync.transport.sender.WebSocketSender webSocketSender(ConnectionRepository connectionRepository) {
+        if (apiGatewayEndpoint != null && !apiGatewayEndpoint.isBlank()) {
+            software.amazon.awssdk.services.apigatewaymanagementapi.ApiGatewayManagementApiClient client =
+                software.amazon.awssdk.services.apigatewaymanagementapi.ApiGatewayManagementApiClient.builder()
+                    .endpointOverride(URI.create(apiGatewayEndpoint))
+                    .region(Region.of(awsRegion))
+                    .credentialsProvider(DefaultCredentialsProvider.create())
+                    .httpClientBuilder(UrlConnectionHttpClient.builder())
+                    .build();
+            return new com.clipsync.transport.sender.ApiGatewayWebSocketSender(client, connectionRepository);
+        }
+        return new com.clipsync.transport.sender.InMemoryWebSocketSender();
+    }
+
+    @Bean
+    public com.clipsync.transport.router.ClipSyncRouter clipSyncRouter(
+        SessionRepository sessionRepository,
+        DeviceRepository deviceRepository,
+        ConnectionRepository connectionRepository,
+        PairingService pairingService,
+        ClipboardRepository clipboardRepository,
+        com.clipsync.transport.sender.WebSocketSender webSocketSender,
+        com.clipsync.transport.validation.FrameValidator frameValidator,
+        com.fasterxml.jackson.databind.ObjectMapper objectMapper
+    ) {
+        return new com.clipsync.transport.router.ClipSyncRouter(
+            sessionRepository,
+            deviceRepository,
+            connectionRepository,
+            pairingService,
+            clipboardRepository,
+            webSocketSender,
+            frameValidator,
+            objectMapper
+        );
+    }
 }

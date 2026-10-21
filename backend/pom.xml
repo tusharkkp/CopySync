@@ -68,6 +68,22 @@
             <artifactId>url-connection-client</artifactId>
         </dependency>
 
+        <!-- AWS SDK v2 API Gateway Management API (postToConnection) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>apigatewaymanagementapi</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
