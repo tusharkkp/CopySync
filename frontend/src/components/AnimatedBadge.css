@@ -1,0 +1,52 @@
+.chai-animated-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  overflow: hidden;
+  border-radius: 9999px;
+  padding: 1px;
+}
+
+.chai-badge-glint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 240px;
+  height: 16px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, transparent 40%, transparent 70%, #ff7d0c 100%);
+  animation: chai-spin 4.5s linear infinite;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chai-badge-glint {
+    animation: none;
+    display: none;
+  }
+}
+
+.chai-badge-inner {
+  position: relative;
+  z-index: 1;
+  border-radius: 9999px;
+  padding: 4px 11px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f4f4f5;
+  color: #18181b;
+  transition: background-color 200ms, color 200ms;
+}
+
+html.dark .chai-badge-inner {
+  background: #18181b;
+  color: #f4f4f5;
+  border: 1px solid rgba(255, 247, 237, 0.08);
+}

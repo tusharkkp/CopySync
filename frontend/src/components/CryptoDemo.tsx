@@ -1,4 +1,13 @@
 import React, { useState, useEffect } from 'react'
+import {
+  ShieldCheck,
+  Lock,
+  Unlock,
+  Smartphone,
+  Laptop,
+  AlertTriangle,
+  Bug,
+} from 'lucide-react'
 import { WebCryptoProvider } from '../crypto/WebCryptoProvider'
 import type { DeviceKeyMaterial, WireMessage } from '../crypto/types'
 import { base64UrlToUint8Array, uint8ArrayToBase64Url } from '../crypto/base64url'
@@ -143,103 +152,148 @@ export const CryptoDemo: React.FC = () => {
   return (
     <div className="crypto-demo">
       <div className="demo-header">
-        <h2>Cryptographic Proof of Concept (Two Browser Contexts)</h2>
-        <p>Testing RFC 9180 HPKE Base Mode + AES-256-GCM + ECDSA P-256 Signing Locally</p>
+        <h2 className="demo-title">Cryptographic Proof of Concept (Two Browser Contexts)</h2>
+        <p className="demo-lead">
+          Testing RFC 9180 HPKE base mode, AES-256-GCM, and ECDSA P-256 signing locally with{' '}
+          <span className="highlight">zero-knowledge privacy</span>.
+        </p>
       </div>
 
       {sas && (
-        <div className="sas-container">
-          <span>Short Authentication String (SAS):</span>
-          <span className="sas-emojis">{sas.emojis}</span>
-          <span className="sas-hex">{sas.hex}</span>
+        <div className="sas-container card-chai">
+          <div className="sas-info">
+            <ShieldCheck size={16} className="text-emerald-400" aria-hidden="true" />
+            <span className="sas-title">Short Authentication String (SAS):</span>
+          </div>
+          <div className="sas-values">
+            <span className="sas-emojis">{sas.emojis}</span>
+            <code className="sas-hex font-mono">{sas.hex}</code>
+          </div>
+          <span className="sas-caption">Both devices derive identical SAS fingerprints to prevent MITM attacks.</span>
         </div>
       )}
 
       <div className="devices-grid">
         {/* Device A (Sender) */}
-        <div className="device-card">
+        <div className="card-chai device-card">
           <div className="device-card-header">
-            <h3>📱 Device A (Sender)</h3>
-            <span className="key-summary">
-              {deviceA ? `ECDSA:${deviceA.publicSigningKeyB64.slice(0, 8)}...` : 'Generating keys...'}
+            <h3>
+              <Smartphone size={16} className="device-icon" aria-hidden="true" />
+              <span>Device A (Sender)</span>
+            </h3>
+            <span className="key-summary font-mono">
+              {deviceA ? `ECDSA: ${deviceA.publicSigningKeyB64.slice(0, 10)}...` : 'Generating keys...'}
             </span>
           </div>
 
-          <label htmlFor="input-a">Plaintext Snapshot:</label>
-          <textarea
-            id="input-a"
-            className="demo-input"
-            rows={4}
-            value={inputA}
-            onChange={(e) => setInputA(e.target.value)}
-          />
+          <div className="device-card-body">
+            <label htmlFor="input-a" className="field-label">
+              Plaintext Snapshot:
+            </label>
+            <textarea
+              id="input-a"
+              className="chai-input demo-input font-mono"
+              rows={4}
+              value={inputA}
+              onChange={(e) => setInputA(e.target.value)}
+              placeholder="Enter plaintext to encrypt..."
+            />
 
-          <button className="demo-btn" onClick={handleEncrypt} disabled={!deviceA}>
-            🔐 Encrypt & Wrap for Device B
-          </button>
+            <button
+              type="button"
+              className="btn btn-solid btn-asym"
+              onClick={handleEncrypt}
+              disabled={!deviceA}
+            >
+              <Lock size={15} aria-hidden="true" />
+              <span>Encrypt & Wrap for Device B</span>
+            </button>
 
-          {wireMessage && (
-            <>
-              <div className="tamper-toolbar">
-                <span className="tamper-label">Inject Tampering Attack:</span>
-                <button className="tamper-btn" onClick={tamperCiphertext}>
-                  Corrupt Ciphertext
-                </button>
-                <button className="tamper-btn" onClick={tamperNonce}>
-                  Corrupt Nonce
-                </button>
-                <button className="tamper-btn" onClick={tamperHeader}>
-                  Modify Header AAD
-                </button>
-                <button className="tamper-btn" onClick={tamperSignature}>
-                  Forge Signature
-                </button>
+            {wireMessage && (
+              <div className="wire-section">
+                <div className="tamper-toolbar">
+                  <div className="tamper-lead">
+                    <Bug size={13} aria-hidden="true" />
+                    <span className="tamper-label">Inject Tampering Attack:</span>
+                  </div>
+                  <div className="tamper-actions">
+                    <button type="button" className="btn btn-outline btn-tiny tamper-btn" onClick={tamperCiphertext}>
+                      Corrupt Ciphertext
+                    </button>
+                    <button type="button" className="btn btn-outline btn-tiny tamper-btn" onClick={tamperNonce}>
+                      Corrupt Nonce
+                    </button>
+                    <button type="button" className="btn btn-outline btn-tiny tamper-btn" onClick={tamperHeader}>
+                      Modify Header AAD
+                    </button>
+                    <button type="button" className="btn btn-outline btn-tiny tamper-btn" onClick={tamperSignature}>
+                      Forge Signature
+                    </button>
+                  </div>
+                </div>
+
+                <div className="wire-viewer font-mono">
+                  {isTampered && (
+                    <div className="tamper-alert">
+                      <AlertTriangle size={14} aria-hidden="true" />
+                      <span>Payload has been tampered with in transit</span>
+                    </div>
+                  )}
+                  {JSON.stringify(wireMessage, null, 2)}
+                </div>
               </div>
-
-              <div className="wire-viewer">
-                {isTampered && <div style={{ color: '#ef4444', marginBottom: 6 }}>⚠️ PAYLOAD HAS BEEN TAMPERED</div>}
-                {JSON.stringify(wireMessage, null, 2)}
-              </div>
-            </>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Device B (Receiver) */}
-        <div className="device-card">
+        <div className="card-chai device-card">
           <div className="device-card-header">
-            <h3>💻 Device B (Receiver)</h3>
-            <span className="key-summary">
-              {deviceB ? `HPKE:${deviceB.publicHpkeKeyB64.slice(0, 8)}...` : 'Generating keys...'}
+            <h3>
+              <Laptop size={16} className="device-icon" aria-hidden="true" />
+              <span>Device B (Receiver)</span>
+            </h3>
+            <span className="key-summary font-mono">
+              {deviceB ? `HPKE: ${deviceB.publicHpkeKeyB64.slice(0, 10)}...` : 'Generating keys...'}
             </span>
           </div>
 
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>
-            Receiver verifies sender signature, decapsulates CEK via HPKE, checks AES-GCM authentication tag, and applies.
-          </p>
+          <div className="device-card-body">
+            <p className="device-desc">
+              Receiver verifies sender ECDSA signature, decapsulates content encryption key via RFC 9180 HPKE, verifies AES-GCM tag, and renders verified plaintext.
+            </p>
 
-          <button
-            className="demo-btn"
-            onClick={handleDecrypt}
-            disabled={!wireMessage}
-            style={{ backgroundColor: '#10b981' }}
-          >
-            🔓 Verify & Decrypt Inbound Envelope
-          </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleDecrypt}
+              disabled={!wireMessage}
+            >
+              <Unlock size={15} aria-hidden="true" />
+              <span>Verify & Decrypt Inbound Envelope</span>
+            </button>
 
-          {decryptedB && (
-            <div className="result-box success">
-              <strong>✅ Authenticated & Decrypted Successfully:</strong>
-              <p style={{ margin: '8px 0 0 0', fontFamily: 'var(--font-mono)' }}>{decryptedB}</p>
-            </div>
-          )}
+            {decryptedB && (
+              <div className="result-box success" role="status">
+                <div className="result-title">
+                  <ShieldCheck size={16} aria-hidden="true" />
+                  <strong>Authenticated & Decrypted Successfully:</strong>
+                </div>
+                <p className="result-content font-mono">{decryptedB}</p>
+              </div>
+            )}
 
-          {errorB && (
-            <div className="result-box error">
-              <strong>❌ Security Invariant Triggered:</strong>
-              <p style={{ margin: '8px 0 0 0' }}>{errorB}</p>
-              <small style={{ color: '#f87171' }}>Plaintext suppressed (zero content rendered).</small>
-            </div>
-          )}
+            {errorB && (
+              <div className="result-box error" role="alert">
+                <div className="result-title">
+                  <AlertTriangle size={16} aria-hidden="true" />
+                  <strong>Security Invariant Triggered:</strong>
+                </div>
+                <p className="result-content font-mono">{errorB}</p>
+                <small className="error-note">Plaintext suppressed (zero content rendered).</small>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
