@@ -49,7 +49,6 @@ playwright-report/
 .DS_Store
 Thumbs.db
 
-# Local Project Documentation and Notes (Kept locally, excluded from Git)
 /docs/
 /AGENT.md
 /AUTOMATED_VERIFICATION_LOOPS.md
