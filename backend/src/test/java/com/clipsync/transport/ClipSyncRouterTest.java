@@ -7,6 +7,8 @@ import com.clipsync.device.InMemoryDeviceRepository;
 import com.clipsync.pairing.InMemoryPairingRepository;
 import com.clipsync.pairing.PairingService;
 import com.clipsync.session.InMemorySessionRepository;
+import com.clipsync.session.Session;
+import com.clipsync.session.StorageMode;
 import com.clipsync.storage.InMemoryClipboardRepository;
 import com.clipsync.transport.dto.WebSocketResponse;
 import com.clipsync.transport.router.ClipSyncRouter;
@@ -254,5 +256,175 @@ class ClipSyncRouterTest {
             .filter(m -> m.contains("clipboard.update"))
             .count();
         assertThat(echoCount).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("ROUTE: session.create stores custom retentionDays for HISTORY mode")
+    void testSessionCreateHistoryRetention() throws Exception {
+        router.handle(createEvent("$connect", "conn-hist", null));
+
+        String body = """
+            {
+              "v": 1,
+              "action": "session.create",
+              "requestId": "req-h1",
+              "sessionId": "sess-hist-custom",
+              "deviceId": "dev-hist",
+              "publicSigningKeyB64": "sign-key-h",
+              "publicHpkeKeyB64": "hpke-key-h",
+              "storageMode": "HISTORY",
+              "retentionDays": 14
+            }
+            """;
+
+        APIGatewayV2WebSocketResponse response = router.handle(createEvent("session.create", "conn-hist", body));
+        assertThat(response.getStatusCode()).isEqualTo(200);
+
+        WebSocketResponse resp = objectMapper.readValue(response.getBody(), WebSocketResponse.class);
+        assertThat(resp.status()).isEqualTo("OK");
+        assertThat(resp.data().get("storageMode").asText()).isEqualTo("HISTORY");
+        assertThat(resp.data().get("retentionDays").asInt()).isEqualTo(14);
+
+        var sessionOpt = sessionRepo.findById("sess-hist-custom");
+        assertThat(sessionOpt).isPresent();
+        assertThat(sessionOpt.get().retentionDays()).isEqualTo(14);
+    }
+
+    @Test
+    @DisplayName("ROUTE: sync.resume retrieves latest snapshot and revisions for HISTORY session")
+    void testSyncResumeHistory() throws Exception {
+        router.handle(createEvent("$connect", "conn-resume", null));
+
+        // Create HISTORY session
+        String createBody = """
+            {
+              "v": 1,
+              "action": "session.create",
+              "requestId": "req-c3",
+              "sessionId": "sess-resume-01",
+              "deviceId": "dev-res-1",
+              "publicSigningKeyB64": "sign-1",
+              "publicHpkeKeyB64": "hpke-1",
+              "storageMode": "HISTORY",
+              "retentionDays": 7
+            }
+            """;
+        router.handle(createEvent("session.create", "conn-resume", createBody));
+
+        // Add 2 clipboard updates
+        String up1 = """
+            {
+              "v": 1,
+              "action": "clipboard.update",
+              "requestId": "req-u1",
+              "sessionId": "sess-resume-01",
+              "deviceId": "dev-res-1",
+              "header": {"sessionId": "sess-resume-01", "messageId": "msg-001", "senderDeviceId": "dev-res-1", "baseRevisionId": "", "logicalClock": 1, "keyEpoch": 1, "contentType": "text/plain", "plaintextBytes": 5},
+              "payload": {"algorithm": "A256GCM", "nonce": "n1", "ciphertext": "c1"},
+              "snapshotSignature": "s1",
+              "keyEnvelopes": []
+            }
+            """;
+        router.handle(createEvent("clipboard.update", "conn-resume", up1));
+
+        String up2 = """
+            {
+              "v": 1,
+              "action": "clipboard.update",
+              "requestId": "req-u2",
+              "sessionId": "sess-resume-01",
+              "deviceId": "dev-res-1",
+              "header": {"sessionId": "sess-resume-01", "messageId": "msg-002", "senderDeviceId": "dev-res-1", "baseRevisionId": "msg-001", "logicalClock": 2, "keyEpoch": 1, "contentType": "text/plain", "plaintextBytes": 10},
+              "payload": {"algorithm": "A256GCM", "nonce": "n2", "ciphertext": "c2"},
+              "snapshotSignature": "s2",
+              "keyEnvelopes": []
+            }
+            """;
+        router.handle(createEvent("clipboard.update", "conn-resume", up2));
+
+        // Call sync.resume
+        String resumeBody = """
+            {
+              "v": 1,
+              "action": "sync.resume",
+              "requestId": "req-res-check",
+              "sessionId": "sess-resume-01"
+            }
+            """;
+        APIGatewayV2WebSocketResponse resumeResp = router.handle(createEvent("sync.resume", "conn-resume", resumeBody));
+        assertThat(resumeResp.getStatusCode()).isEqualTo(200);
+
+        WebSocketResponse resData = objectMapper.readValue(resumeResp.getBody(), WebSocketResponse.class);
+        assertThat(resData.status()).isEqualTo("OK");
+        assertThat(resData.data().get("storageMode").asText()).isEqualTo("HISTORY");
+        assertThat(resData.data().get("retentionDays").asInt()).isEqualTo(7);
+        assertThat(resData.data().get("latestSnapshot").get("messageId").asText()).isEqualTo("msg-002");
+        assertThat(resData.data().get("revisions").size()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("ROUTE: session.close purges all session data, devices, tokens, and connections")
+    void testSessionClosePurgesAllData() throws Exception {
+        router.handle(createEvent("$connect", "conn-close-test", null));
+
+        // Create session
+        String createBody = """
+            {
+              "v": 1,
+              "action": "session.create",
+              "requestId": "req-close-init",
+              "sessionId": "sess-to-close",
+              "deviceId": "dev-to-close",
+              "publicSigningKeyB64": "sign-x",
+              "publicHpkeKeyB64": "hpke-x",
+              "storageMode": "TEMPORARY"
+            }
+            """;
+        APIGatewayV2WebSocketResponse cResp = router.handle(createEvent("session.create", "conn-close-test", createBody));
+        WebSocketResponse cData = objectMapper.readValue(cResp.getBody(), WebSocketResponse.class);
+        String code = cData.data().get("pairingCode").asText();
+
+        // Add a snapshot
+        String up = """
+            {
+              "v": 1,
+              "action": "clipboard.update",
+              "requestId": "req-up",
+              "sessionId": "sess-to-close",
+              "deviceId": "dev-to-close",
+              "header": {"sessionId": "sess-to-close", "messageId": "msg-001", "senderDeviceId": "dev-to-close", "baseRevisionId": "", "logicalClock": 1, "keyEpoch": 1, "contentType": "text/plain", "plaintextBytes": 5},
+              "payload": {"algorithm": "A256GCM", "nonce": "n1", "ciphertext": "c1"},
+              "snapshotSignature": "s1",
+              "keyEnvelopes": []
+            }
+            """;
+        router.handle(createEvent("clipboard.update", "conn-close-test", up));
+
+        // Verify data exists prior to close
+        assertThat(sessionRepo.findById("sess-to-close")).isPresent();
+        assertThat(deviceRepo.findBySessionAndDeviceId("sess-to-close", "dev-to-close")).isPresent();
+        assertThat(pairingRepo.findBySessionId("sess-to-close")).isPresent();
+
+        // Close session
+        String closeBody = """
+            {
+              "v": 1,
+              "action": "session.close",
+              "requestId": "req-close-exec",
+              "sessionId": "sess-to-close"
+            }
+            """;
+        APIGatewayV2WebSocketResponse closeResp = router.handle(createEvent("session.close", "conn-close-test", closeBody));
+        assertThat(closeResp.getStatusCode()).isEqualTo(200);
+
+        WebSocketResponse closeData = objectMapper.readValue(closeResp.getBody(), WebSocketResponse.class);
+        assertThat(closeData.status()).isEqualTo("OK");
+        assertThat(closeData.data().get("status").asText()).isEqualTo("CLOSED");
+
+        // Verify full purge across repositories
+        assertThat(sessionRepo.findById("sess-to-close")).isEmpty();
+        assertThat(deviceRepo.findBySessionAndDeviceId("sess-to-close", "dev-to-close")).isEmpty();
+        assertThat(pairingRepo.findBySessionId("sess-to-close")).isEmpty();
+        assertThat(clipboardRepo.listRevisions(Session.createDefault("sess-to-close", StorageMode.TEMPORARY))).isEmpty();
     }
 }

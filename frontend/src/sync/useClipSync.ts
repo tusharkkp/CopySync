@@ -47,8 +47,8 @@ export function useClipSync(options: UseClipSyncOptions = {}) {
   )
 
   const createSession = useCallback(
-    async (mode: StorageMode = 'ephemeral') => {
-      await service.createSession(mode)
+    async (mode: StorageMode = 'ephemeral', retentionDays = 30) => {
+      await service.createSession(mode, retentionDays)
     },
     [service]
   )
@@ -59,6 +59,17 @@ export function useClipSync(options: UseClipSyncOptions = {}) {
     },
     [service]
   )
+
+  const resumeSession = useCallback(
+    async (sessionId: string) => {
+      await service.resumeSession(sessionId)
+    },
+    [service]
+  )
+
+  const closeSession = useCallback(async () => {
+    await service.closeSession()
+  }, [service])
 
   const leaveSession = useCallback(() => {
     service.leaveSession()
@@ -74,6 +85,8 @@ export function useClipSync(options: UseClipSyncOptions = {}) {
     state,
     createSession,
     joinSession,
+    resumeSession,
+    closeSession,
     leaveSession,
     syncNow,
     service,

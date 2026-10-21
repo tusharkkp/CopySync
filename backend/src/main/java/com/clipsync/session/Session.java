@@ -25,9 +25,14 @@ public record Session(
     }
 
     public static Session createDefault(String sessionId, StorageMode mode) {
+        return create(sessionId, mode, mode == StorageMode.HISTORY ? 30 : 0);
+    }
+
+    public static Session create(String sessionId, StorageMode mode, int retentionDays) {
         Instant now = Instant.now();
-        // 24-hour default session TTL
-        long defaultTtl = now.getEpochSecond() + (24 * 3600);
-        return new Session(sessionId, mode, 0, 1, SessionStatus.ACTIVE, now, defaultTtl);
+        long defaultTtl = now.getEpochSecond() + (mode == StorageMode.HISTORY
+            ? (long) Math.max(1, retentionDays) * 86400L
+            : (24 * 3600));
+        return new Session(sessionId, mode, retentionDays, 1, SessionStatus.ACTIVE, now, defaultTtl);
     }
 }

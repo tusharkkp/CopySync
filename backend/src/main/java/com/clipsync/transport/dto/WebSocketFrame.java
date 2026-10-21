@@ -18,6 +18,7 @@ public record WebSocketFrame(
     JsonNode payload,
     String snapshotSignature,
     JsonNode keyEnvelopes,
+    Integer retentionDays,
     String targetDeviceId,
     JsonNode signal
 ) {

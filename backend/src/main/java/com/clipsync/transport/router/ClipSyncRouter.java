@@ -23,6 +23,7 @@ import com.clipsync.transport.validation.ProtocolErrorCode;
 import com.clipsync.transport.validation.ValidationException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.security.SecureRandom;
@@ -115,6 +116,8 @@ public class ClipSyncRouter {
         return switch (frame.action()) {
             case "session.create" -> handleSessionCreate(connectionId, frame);
             case "session.join" -> handleSessionJoin(connectionId, frame);
+            case "session.close" -> handleSessionClose(connectionId, frame);
+            case "sync.resume" -> handleSyncResume(connectionId, frame);
             case "clipboard.update" -> handleClipboardUpdate(connectionId, frame, body);
             case "clipboard.read" -> handleClipboardRead(connectionId, frame);
             case "signaling.offer", "signaling.answer", "signaling.ice" -> handleSignaling(connectionId, frame, body);
@@ -134,7 +137,11 @@ public class ClipSyncRouter {
             } catch (IllegalArgumentException ignored) {}
         }
 
-        Session session = Session.createDefault(sessionId, mode);
+        int retentionDays = (frame.retentionDays() != null && frame.retentionDays() > 0)
+            ? frame.retentionDays()
+            : (mode == StorageMode.HISTORY ? 30 : 0);
+
+        Session session = Session.create(sessionId, mode, retentionDays);
         sessionRepository.save(session);
 
         // Generate 6-digit numeric pairing code
@@ -168,6 +175,7 @@ public class ClipSyncRouter {
         data.put("sessionId", sessionId);
         data.put("pairingCode", pairingCode);
         data.put("storageMode", mode.name());
+        data.put("retentionDays", retentionDays);
         data.put("keyEpoch", session.keyEpoch());
 
         return buildOkResponse(frame.action(), frame.requestId(), data);
@@ -266,7 +274,13 @@ public class ClipSyncRouter {
         String keyEnvelopesJson = frame.keyEnvelopes() != null ? frame.keyEnvelopes().toString() : "[]";
 
         Instant now = Instant.now();
-        Instant expiresAt = (session.storageMode() == StorageMode.TEMPORARY) ? now.plusSeconds(600) : null;
+        Instant expiresAt = null;
+        if (session.storageMode() == StorageMode.TEMPORARY) {
+            expiresAt = now.plusSeconds(600);
+        } else if (session.storageMode() == StorageMode.HISTORY) {
+            int days = session.retentionDays() > 0 ? session.retentionDays() : 30;
+            expiresAt = now.plus(Duration.ofDays(days));
+        }
         long ttl = (expiresAt != null) ? expiresAt.getEpochSecond() : 0L;
 
         ClipboardSnapshot snapshot = new ClipboardSnapshot(
@@ -325,6 +339,98 @@ public class ClipSyncRouter {
             data.put("payloadCiphertext", s.payloadCiphertext());
             data.put("payloadNonce", s.payloadNonce());
             data.put("snapshotSignature", s.snapshotSignature());
+        }
+
+        return buildOkResponse(frame.action(), frame.requestId(), data);
+    }
+
+    private APIGatewayV2WebSocketResponse handleSessionClose(String connectionId, WebSocketFrame frame) {
+        if (frame.sessionId() == null) {
+            return buildErrorResponse(400, frame.action(), frame.requestId(), ProtocolErrorCode.MISSING_PARAMETER, "sessionId required");
+        }
+
+        String sessionId = frame.sessionId();
+
+        // 1. Delete all clipboard snapshots from ClipSyncClipboard
+        clipboardRepository.deleteAllForSession(sessionId);
+
+        // 2. Delete all devices for session
+        deviceRepository.deleteAllForSession(sessionId);
+
+        // 3. Delete pairing token
+        pairingService.deletePairingToken(sessionId);
+
+        // 4. Disconnect and remove active connections
+        List<Connection> peers = connectionRepository.findActiveBySessionId(sessionId);
+        for (Connection peer : peers) {
+            connectionRepository.remove(peer.connectionId());
+        }
+
+        // 5. Delete session from ClipSyncRegistry
+        sessionRepository.delete(sessionId);
+
+        ObjectNode data = objectMapper.createObjectNode();
+        data.put("status", "CLOSED");
+        data.put("sessionId", sessionId);
+
+        return buildOkResponse(frame.action(), frame.requestId(), data);
+    }
+
+    private APIGatewayV2WebSocketResponse handleSyncResume(String connectionId, WebSocketFrame frame) {
+        if (frame.sessionId() == null) {
+            return buildErrorResponse(400, frame.action(), frame.requestId(), ProtocolErrorCode.MISSING_PARAMETER, "sessionId required");
+        }
+
+        Optional<Session> optSession = sessionRepository.findById(frame.sessionId());
+        if (optSession.isEmpty()) {
+            return buildErrorResponse(404, frame.action(), frame.requestId(), ProtocolErrorCode.SESSION_NOT_FOUND, "Session not found");
+        }
+
+        Session session = optSession.get();
+        ObjectNode data = objectMapper.createObjectNode();
+        data.put("sessionId", session.sessionId());
+        data.put("storageMode", session.storageMode().name());
+        data.put("retentionDays", session.retentionDays());
+        data.put("keyEpoch", session.keyEpoch());
+
+        if (session.storageMode() == StorageMode.EPHEMERAL) {
+            data.putNull("latestSnapshot");
+            data.putArray("revisions");
+            return buildOkResponse(frame.action(), frame.requestId(), data);
+        }
+
+        Optional<ClipboardSnapshot> latest = clipboardRepository.findLatest(session);
+        if (latest.isPresent()) {
+            ClipboardSnapshot s = latest.get();
+            ObjectNode snapNode = objectMapper.createObjectNode();
+            snapNode.put("messageId", s.messageId());
+            snapNode.put("logicalClock", s.logicalClock());
+            snapNode.put("payloadCiphertext", s.payloadCiphertext());
+            snapNode.put("payloadNonce", s.payloadNonce());
+            snapNode.put("snapshotSignature", s.snapshotSignature());
+            snapNode.put("keyEnvelopesJson", s.keyEnvelopesJson());
+            data.set("latestSnapshot", snapNode);
+        } else {
+            data.putNull("latestSnapshot");
+        }
+
+        if (session.storageMode() == StorageMode.HISTORY) {
+            List<ClipboardSnapshot> revisions = clipboardRepository.listRevisions(session);
+            ArrayNode revArray = objectMapper.createArrayNode();
+            for (ClipboardSnapshot rev : revisions) {
+                ObjectNode rNode = objectMapper.createObjectNode();
+                rNode.put("messageId", rev.messageId());
+                rNode.put("logicalClock", rev.logicalClock());
+                rNode.put("createdAt", rev.createdAt().toString());
+                rNode.put("payloadCiphertext", rev.payloadCiphertext());
+                rNode.put("payloadNonce", rev.payloadNonce());
+                rNode.put("snapshotSignature", rev.snapshotSignature());
+                rNode.put("keyEnvelopesJson", rev.keyEnvelopesJson());
+                revArray.add(rNode);
+            }
+            data.set("revisions", revArray);
+        } else {
+            data.putArray("revisions");
         }
 
         return buildOkResponse(frame.action(), frame.requestId(), data);

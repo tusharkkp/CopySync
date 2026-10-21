@@ -22,7 +22,9 @@ public class FrameValidator {
         "clipboard.read",
         "signaling.offer",
         "signaling.answer",
-        "signaling.ice"
+        "signaling.ice",
+        "session.close",
+        "sync.resume"
     );
 
     private final ObjectMapper objectMapper;

@@ -79,4 +79,8 @@ public class PairingService {
             throw new IllegalStateException("SHA-256 algorithm not available in JVM", e);
         }
     }
+
+    public void deletePairingToken(String sessionId) {
+        pairingRepository.delete(sessionId);
+    }
 }

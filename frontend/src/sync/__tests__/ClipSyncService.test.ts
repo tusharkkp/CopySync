@@ -248,4 +248,100 @@ describe('SYNC: ClipSyncService Domain Suite', () => {
     expect(service.getContent()).toBe('')
     expect(mockWs.sentData.length).toBe(0)
   })
+
+  it('creates history session with configurable retentionDays', async () => {
+    await service.createSession('history', 7)
+    expect(mockWs.sentData.length).toBe(1)
+
+    const sent = JSON.parse(mockWs.sentData[0])
+    expect(sent.action).toBe('session.create')
+    expect(sent.storageMode).toBe('HISTORY')
+    expect(sent.retentionDays).toBe(7)
+
+    // Simulate backend response
+    mockWs.simulateMessage({
+      status: 'OK',
+      action: 'session.create',
+      data: {
+        sessionId: sent.sessionId,
+        pairingCode: '112233',
+        storageMode: 'HISTORY',
+        retentionDays: 7,
+        keyEpoch: 1,
+      },
+    })
+
+    const state = service.getState()
+    expect(state.storageMode).toBe('history')
+    expect(state.retentionDays).toBe(7)
+  })
+
+  it('closes session and sends session.close frame', async () => {
+    await service.createSession()
+    mockWs.sentData = []
+
+    await service.closeSession()
+    expect(mockWs.sentData.length).toBe(1)
+
+    const sent = JSON.parse(mockWs.sentData[0])
+    expect(sent.action).toBe('session.close')
+    expect(sent.sessionId).toBeDefined()
+
+    const state = service.getState()
+    expect(state.phase).toBe('unpaired')
+    expect(state.sessionId).toBeNull()
+  })
+
+  it('resumes session and loads history revisions', async () => {
+    await service.resumeSession('sess-resume-test')
+    expect(mockWs.sentData.length).toBe(1)
+
+    const sent = JSON.parse(mockWs.sentData[0])
+    expect(sent.action).toBe('sync.resume')
+    expect(sent.sessionId).toBe('sess-resume-test')
+
+    // Simulate backend response with revisions
+    mockWs.simulateMessage({
+      status: 'OK',
+      action: 'sync.resume',
+      data: {
+        sessionId: 'sess-resume-test',
+        storageMode: 'HISTORY',
+        retentionDays: 30,
+        keyEpoch: 1,
+        latestSnapshot: {
+          messageId: 'msg-latest',
+          logicalClock: 4,
+          payloadCiphertext: 'cipher4',
+          payloadNonce: 'nonce4',
+          snapshotSignature: 'sig4',
+          keyEnvelopesJson: '[]',
+        },
+        revisions: [
+          {
+            messageId: 'msg-1',
+            logicalClock: 1,
+            payloadCiphertext: 'c1',
+            payloadNonce: 'n1',
+            snapshotSignature: 's1',
+            keyEnvelopesJson: '[]',
+          },
+          {
+            messageId: 'msg-2',
+            logicalClock: 2,
+            payloadCiphertext: 'c2',
+            payloadNonce: 'n2',
+            snapshotSignature: 's2',
+            keyEnvelopesJson: '[]',
+          },
+        ],
+      },
+    })
+
+    const state = service.getState()
+    expect(state.storageMode).toBe('history')
+    expect(state.retentionDays).toBe(30)
+    expect(state.revisions.length).toBe(2)
+    expect(state.logicalClock).toBe(4)
+  })
 })

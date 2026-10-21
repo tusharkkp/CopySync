@@ -103,4 +103,30 @@ class FrameValidatorTest {
         assertThat(frame.sessionId()).isEqualTo("sess-alpha");
         assertThat(frame.deviceId()).isEqualTo("dev-01");
     }
+
+    @Test
+    @DisplayName("Recognizes session.close and sync.resume actions as valid")
+    void testPhase7Actions() {
+        String closeJson = """
+            {
+              "v": 1,
+              "action": "session.close",
+              "requestId": "req-close",
+              "sessionId": "sess-alpha"
+            }
+            """;
+        WebSocketFrame closeFrame = validator.validateJson(closeJson);
+        assertThat(closeFrame.action()).isEqualTo("session.close");
+
+        String resumeJson = """
+            {
+              "v": 1,
+              "action": "sync.resume",
+              "requestId": "req-resume",
+              "sessionId": "sess-alpha"
+            }
+            """;
+        WebSocketFrame resumeFrame = validator.validateJson(resumeJson);
+        assertThat(resumeFrame.action()).isEqualTo("sync.resume");
+    }
 }

@@ -6,6 +6,7 @@ export interface PairingBarProps {
   onCreateSession: (mode: StorageMode) => void
   onJoinSession: (sessionId: string, pairingCode: string) => void
   onLeaveSession: () => void
+  onCloseSession?: () => void
 }
 
 export const PairingBar: React.FC<PairingBarProps> = ({
@@ -13,6 +14,7 @@ export const PairingBar: React.FC<PairingBarProps> = ({
   onCreateSession,
   onJoinSession,
   onLeaveSession,
+  onCloseSession,
 }) => {
   const [showJoinForm, setShowJoinForm] = useState(false)
   const [joinSessionId, setJoinSessionId] = useState('')
@@ -202,6 +204,12 @@ export const PairingBar: React.FC<PairingBarProps> = ({
               )}
             </div>
 
+            <div className="storage-mode-badge" data-testid="storage-mode-badge">
+              {state.storageMode === 'ephemeral' && '🛡️ Ephemeral'}
+              {state.storageMode === 'temporary' && '⏱️ 10m Temporary'}
+              {state.storageMode === 'history' && `📜 ${state.retentionDays || 30}d History`}
+            </div>
+
             {state.sas && (
               <div className="sas-fingerprint" title="Safety Fingerprint / Short Authentication String (SAS)">
                 <span className="sas-label">Fingerprint:</span>
@@ -224,6 +232,16 @@ export const PairingBar: React.FC<PairingBarProps> = ({
             >
               Disconnect
             </button>
+            {onCloseSession && (
+              <button
+                className="btn btn-danger btn-tiny"
+                onClick={onCloseSession}
+                data-testid="btn-close-session"
+                title="Purge all snapshots, pairing tokens, and session data immediately"
+              >
+                Close & Purge
+              </button>
+            )}
           </div>
         </div>
       )}

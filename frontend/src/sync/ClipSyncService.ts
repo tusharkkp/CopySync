@@ -14,12 +14,24 @@ export type StorageMode = 'ephemeral' | 'temporary' | 'history'
 export type SessionPhase = 'unpaired' | 'creating' | 'joining' | 'waiting_for_peer' | 'paired'
 export type TransportMode = 'direct' | 'relay'
 
+export interface HistoryRevision {
+  messageId: string
+  logicalClock: number
+  createdAt?: string
+  payloadCiphertext: string
+  payloadNonce: string
+  snapshotSignature: string
+  keyEnvelopesJson: string
+}
+
 export interface ClipSyncState {
   deviceId: string
   connectionStatus: WebSocketStatus
   sessionId: string | null
   pairingCode: string | null
   storageMode: StorageMode
+  retentionDays: number
+  revisions: HistoryRevision[]
   phase: SessionPhase
   peers: Record<string, PeerPublicKey>
   sas: { hex: string; emojis: string } | null
@@ -44,6 +56,8 @@ export class ClipSyncService {
   private sessionId: string | null = null
   private pairingCode: string | null = null
   private storageMode: StorageMode = 'ephemeral'
+  private retentionDays = 30
+  private revisions: HistoryRevision[] = []
   private phase: SessionPhase = 'unpaired'
   private peers: Record<string, PeerPublicKey> = {}
   private sas: { hex: string; emojis: string } | null = null
@@ -58,6 +72,7 @@ export class ClipSyncService {
 
   private content = ''
   private lastSyncedContent = ''
+  private inFlightSyncContent: string | null = null
   private typingDebounceTimer: ReturnType<typeof setTimeout> | null = null
   private maxIntervalTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -95,6 +110,8 @@ export class ClipSyncService {
       sessionId: this.sessionId,
       pairingCode: this.pairingCode,
       storageMode: this.storageMode,
+      retentionDays: this.retentionDays,
+      revisions: [...this.revisions],
       phase: this.phase,
       peers: { ...this.peers },
       sas: this.sas,
@@ -118,10 +135,12 @@ export class ClipSyncService {
     return this.deviceKeys
   }
 
-  public async createSession(mode: StorageMode = 'ephemeral'): Promise<void> {
+  public async createSession(mode: StorageMode = 'ephemeral', retentionDays = 30): Promise<void> {
     this.error = null
     this.phase = 'creating'
     this.storageMode = mode
+    this.retentionDays = mode === 'history' ? retentionDays : 0
+    this.revisions = []
     this.notifyState()
 
     try {
@@ -141,6 +160,7 @@ export class ClipSyncService {
         sessionId: generatedSessionId,
         deviceId: this.deviceId,
         storageMode: mode.toUpperCase(),
+        retentionDays: mode === 'history' ? retentionDays : 0,
         publicSigningKeyB64: keys.publicSigningKeyB64,
         publicHpkeKeyB64: keys.publicHpkeKeyB64,
       }
@@ -187,6 +207,50 @@ export class ClipSyncService {
     }
   }
 
+  public async resumeSession(targetSessionId: string): Promise<void> {
+    this.error = null
+    this.phase = 'joining'
+    this.sessionId = targetSessionId.trim()
+    this.notifyState()
+
+    try {
+      await this.initKeys()
+      if (this.wsClient.getStatus() !== 'connected') {
+        this.wsClient.connect()
+      }
+
+      const requestId = 'req-r-' + Date.now()
+      const resumeFrame = {
+        v: 1,
+        action: 'sync.resume',
+        requestId,
+        sessionId: this.sessionId,
+        deviceId: this.deviceId,
+      }
+
+      this.wsClient.send(resumeFrame)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to resume session'
+      this.error = message
+      this.phase = 'unpaired'
+      this.notifyState()
+    }
+  }
+
+  public async closeSession(): Promise<void> {
+    if (this.sessionId) {
+      const closeFrame = {
+        v: 1,
+        action: 'session.close',
+        requestId: 'req-close-' + Date.now(),
+        sessionId: this.sessionId,
+        deviceId: this.deviceId,
+      }
+      this.wsClient.send(closeFrame)
+    }
+    this.leaveSession()
+  }
+
   public leaveSession(): void {
     if (this.webRtcManager) {
       this.webRtcManager.close()
@@ -198,6 +262,7 @@ export class ClipSyncService {
     this.pairingCode = null
     this.peers = {}
     this.sas = null
+    this.revisions = []
     this.phase = 'unpaired'
     this.error = null
     this.clearDebounceTimers()
@@ -245,9 +310,14 @@ export class ClipSyncService {
       return
     }
 
-    if (this.content === this.lastSyncedContent && this.lastSyncedAt !== null) {
+    if (
+      (this.content === this.lastSyncedContent && this.lastSyncedAt !== null) ||
+      this.inFlightSyncContent === this.content
+    ) {
       return
     }
+
+    this.inFlightSyncContent = this.content
 
     this.logicalClock += 1
     const textBytes = new TextEncoder().encode(this.content).length
@@ -298,11 +368,26 @@ export class ClipSyncService {
       if (sent) {
         this.lastSyncedContent = this.content
         this.lastSyncedAt = new Date()
+        if (this.storageMode === 'history') {
+          this.revisions = [
+            ...this.revisions,
+            {
+              messageId: header.messageId,
+              logicalClock: header.logicalClock,
+              createdAt: new Date().toISOString(),
+              payloadCiphertext: wireMsg.payload.ciphertext,
+              payloadNonce: wireMsg.payload.nonce,
+              snapshotSignature: wireMsg.snapshotSignature,
+              keyEnvelopesJson: JSON.stringify(wireMsg.keyEnvelopes),
+            },
+          ]
+        }
       }
     } catch (err: unknown) {
       console.error('[ClipSyncService] Encryption / sync failed:', err)
       this.error = err instanceof Error ? err.message : 'Sync failed'
     } finally {
+      this.inFlightSyncContent = null
       setTimeout(() => this.setSyncing(false), 500)
       this.notifyState()
     }
@@ -359,6 +444,12 @@ export class ClipSyncService {
       const data = msg.data as Record<string, unknown>
       this.sessionId = (data.sessionId as string) || this.sessionId
       this.pairingCode = data.pairingCode as string
+      if (typeof data.retentionDays === 'number') {
+        this.retentionDays = data.retentionDays
+      }
+      if (data.storageMode) {
+        this.storageMode = (data.storageMode as string).toLowerCase() as StorageMode
+      }
       this.phase = 'waiting_for_peer'
       this.notifyState()
       return
@@ -480,6 +571,20 @@ export class ClipSyncService {
         this.lastSyncedContent = decryptedText
         this.logicalClock = Math.max(this.logicalClock, wireMsg.header.logicalClock)
         this.lastSyncedAt = new Date()
+        if (this.storageMode === 'history') {
+          this.revisions = [
+            ...this.revisions,
+            {
+              messageId: wireMsg.header.messageId,
+              logicalClock: wireMsg.header.logicalClock,
+              createdAt: new Date().toISOString(),
+              payloadCiphertext: wireMsg.payload.ciphertext,
+              payloadNonce: wireMsg.payload.nonce,
+              snapshotSignature: wireMsg.snapshotSignature,
+              keyEnvelopesJson: JSON.stringify(wireMsg.keyEnvelopes),
+            },
+          ]
+        }
         this.notifyContent()
       } catch (err: unknown) {
         console.error('[ClipSyncService] Inbound verification failed:', err)
@@ -488,6 +593,57 @@ export class ClipSyncService {
         setTimeout(() => this.setSyncing(false), 500)
         this.notifyState()
       }
+      return
+    }
+
+    // 6. Inbound session.close acknowledgement / notification
+    if (action === 'session.close') {
+      this.leaveSession()
+      return
+    }
+
+    // 7. Inbound sync.resume acknowledgement
+    if (action === 'sync.resume') {
+      if (status === 'OK' && msg.data) {
+        const data = msg.data as Record<string, unknown>
+        this.sessionId = (data.sessionId as string) || this.sessionId
+        if (data.storageMode) {
+          this.storageMode = (data.storageMode as string).toLowerCase() as StorageMode
+        }
+        if (typeof data.retentionDays === 'number') {
+          this.retentionDays = data.retentionDays
+        }
+        this.phase = 'paired'
+
+        if (Array.isArray(data.revisions)) {
+          this.revisions = (data.revisions as Record<string, unknown>[]).map((r) => ({
+            messageId: r.messageId as string,
+            logicalClock: (r.logicalClock as number) || 0,
+            createdAt: r.createdAt as string | undefined,
+            payloadCiphertext: r.payloadCiphertext as string,
+            payloadNonce: r.payloadNonce as string,
+            snapshotSignature: r.snapshotSignature as string,
+            keyEnvelopesJson: (r.keyEnvelopesJson as string) || '[]',
+          }))
+        } else {
+          this.revisions = []
+        }
+
+        if (data.latestSnapshot) {
+          const snap = data.latestSnapshot as Record<string, unknown>
+          const snapClock = (snap.logicalClock as number) || 0
+          if (snapClock > this.logicalClock) {
+            this.logicalClock = snapClock
+          }
+        }
+
+        this.notifyState()
+      } else {
+        this.error = (msg.errorMessage as string) || 'Failed to resume session'
+        this.phase = 'unpaired'
+        this.notifyState()
+      }
+      return
     }
   }
 

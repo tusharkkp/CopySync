@@ -124,4 +124,38 @@ class ClipboardRepositoryTest {
         Optional<ClipboardSnapshot> retrieved = repository.findLatest(session);
         assertThat(retrieved).isEmpty();
     }
+
+    @Test
+    @DisplayName("HISTORY mode: Preserves multiple revisions and deleteAllForSession purges all")
+    void historyModePreservesRevisionsAndPurgesAll() {
+        String sessionId = "sess-hist-01";
+        Session session = Session.create(sessionId, StorageMode.HISTORY, 7);
+
+        ClipboardSnapshot rev1 = new ClipboardSnapshot(
+            sessionId, "msg-001", "dev-a", 1L, "msg-000", 1, "text/plain", 10,
+            "cipher-1", "nonce-1", "sig-1", "[]",
+            Instant.now().minusSeconds(100), Instant.now().plusSeconds(86400 * 7), 0
+        );
+        ClipboardSnapshot rev2 = new ClipboardSnapshot(
+            sessionId, "msg-002", "dev-a", 2L, "msg-001", 1, "text/plain", 20,
+            "cipher-2", "nonce-2", "sig-2", "[]",
+            Instant.now().minusSeconds(50), Instant.now().plusSeconds(86400 * 7), 0
+        );
+
+        repository.save(session, rev1);
+        repository.save(session, rev2);
+
+        // findLatest returns newest logical clock
+        Optional<ClipboardSnapshot> latest = repository.findLatest(session);
+        assertThat(latest).isPresent();
+        assertThat(latest.get().messageId()).isEqualTo("msg-002");
+
+        // listRevisions returns both
+        assertThat(repository.listRevisions(session)).hasSize(2);
+
+        // deleteAllForSession purges everything
+        repository.deleteAllForSession(sessionId);
+        assertThat(repository.findLatest(session)).isEmpty();
+        assertThat(repository.listRevisions(session)).isEmpty();
+    }
 }

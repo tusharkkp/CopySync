@@ -13,6 +13,7 @@ export type ActiveView = 'editor' | 'crypto-demo'
 export const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ActiveView>('editor')
   const [storageMode, setStorageMode] = useState<StorageMode>('ephemeral')
+  const [retentionDays, setRetentionDays] = useState<number>(30)
 
   const {
     content,
@@ -20,6 +21,7 @@ export const App: React.FC = () => {
     state,
     createSession,
     joinSession,
+    closeSession,
     leaveSession,
   } = useClipSync()
 
@@ -100,9 +102,24 @@ export const App: React.FC = () => {
             >
               <option value="ephemeral">Ephemeral (Relay Only)</option>
               <option value="temporary">Temporary (10 Min)</option>
-              <option value="history">History (30 Days)</option>
+              <option value="history">History (Encrypted)</option>
             </select>
           </div>
+
+          {storageMode === 'history' && (
+            <div className="retention-selector" data-testid="retention-selector">
+              <label htmlFor="retention-days">Retention:</label>
+              <select
+                id="retention-days"
+                value={retentionDays}
+                onChange={(e) => setRetentionDays(Number(e.target.value))}
+              >
+                <option value={1}>1 Day</option>
+                <option value={7}>7 Days</option>
+                <option value={30}>30 Days</option>
+              </select>
+            </div>
+          )}
         </div>
       </header>
 
@@ -111,9 +128,10 @@ export const App: React.FC = () => {
           <>
             <PairingBar
               state={state}
-              onCreateSession={() => createSession(storageMode)}
+              onCreateSession={() => createSession(storageMode, retentionDays)}
               onJoinSession={joinSession}
               onLeaveSession={leaveSession}
+              onCloseSession={closeSession}
             />
 
             <div className="editor-toolbar">
