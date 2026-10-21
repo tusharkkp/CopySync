@@ -1,0 +1,52 @@
+name: ClipSync Deploy Dev (AWS SAM & OIDC)
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write   # Required for requesting AWS STS OIDC token
+  contents: read    # Required for actions/checkout
+
+jobs:
+  deploy:
+    name: Deploy Serverless Backend to AWS (dev)
+    runs-on: ubuntu-latest
+    environment: dev  # Bound to GitHub Environment with required reviewer gate (manual brake)
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Setup AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Authenticate via GitHub OIDC (No Long-Lived Keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: ClipSyncGitHubDeploySession
+          aws-region: ap-south-1
+          audience: sts.amazonaws.com
+
+      - name: Package Backend Application
+        working-directory: backend
+        run: mvn -B clean package -DskipTests
+
+      - name: Build SAM Infrastructure
+        working-directory: infra
+        run: sam build
+
+      - name: Deploy SAM Stack (clipsync-dev)
+        working-directory: infra
+        run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset

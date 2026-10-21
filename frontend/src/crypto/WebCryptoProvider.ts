@@ -101,12 +101,12 @@ export class WebCryptoProvider implements CryptoProvider {
     const encryptedBuffer = await crypto.subtle.encrypt(
       {
         name: 'AES-GCM',
-        iv: nonceBytes,
-        additionalData: headerAAD,
+        iv: nonceBytes as unknown as BufferSource,
+        additionalData: headerAAD as unknown as BufferSource,
         tagLength: 128,
       },
       cekKey,
-      plaintextBytes
+      plaintextBytes as unknown as BufferSource
     )
 
     const ciphertextBytes = new Uint8Array(encryptedBuffer)
@@ -150,7 +150,7 @@ export class WebCryptoProvider implements CryptoProvider {
       const envelopeSigBuffer = await crypto.subtle.sign(
         { name: 'ECDSA', hash: { name: 'SHA-256' } },
         senderKeys.signingKeyPair.privateKey,
-        envelopeToSign
+        envelopeToSign as unknown as BufferSource
       )
 
       keyEnvelopes.push({
@@ -205,7 +205,7 @@ export class WebCryptoProvider implements CryptoProvider {
     const senderPubSpki = base64UrlToUint8Array(senderPublicSigningKeyB64)
     const senderSigningKey = await crypto.subtle.importKey(
       'spki',
-      senderPubSpki,
+      senderPubSpki as unknown as BufferSource,
       { name: 'ECDSA', namedCurve: 'P-256' },
       false,
       ['verify']
@@ -223,8 +223,8 @@ export class WebCryptoProvider implements CryptoProvider {
     const isSnapshotSigValid = await crypto.subtle.verify(
       { name: 'ECDSA', hash: { name: 'SHA-256' } },
       senderSigningKey,
-      base64UrlToUint8Array(message.snapshotSignature),
-      payloadToVerify
+      base64UrlToUint8Array(message.snapshotSignature) as unknown as BufferSource,
+      payloadToVerify as unknown as BufferSource
     )
 
     if (!isSnapshotSigValid) {
@@ -250,8 +250,8 @@ export class WebCryptoProvider implements CryptoProvider {
     const isEnvelopeSigValid = await crypto.subtle.verify(
       { name: 'ECDSA', hash: { name: 'SHA-256' } },
       senderSigningKey,
-      base64UrlToUint8Array(envelope.signature),
-      envelopeToVerify
+      base64UrlToUint8Array(envelope.signature) as unknown as BufferSource,
+      envelopeToVerify as unknown as BufferSource
     )
 
     if (!isEnvelopeSigValid) {
@@ -294,12 +294,12 @@ export class WebCryptoProvider implements CryptoProvider {
       decryptedBuffer = await crypto.subtle.decrypt(
         {
           name: 'AES-GCM',
-          iv: nonceBytes,
-          additionalData: headerAAD,
+          iv: nonceBytes as unknown as BufferSource,
+          additionalData: headerAAD as unknown as BufferSource,
           tagLength: 128,
         },
         cekKey,
-        ciphertextBytes
+        ciphertextBytes as unknown as BufferSource
       )
     } catch {
       throw new Error('CRYPTO-03: AES-GCM decryption failed (ciphertext, nonce, or tag tampered)')

@@ -57,6 +57,14 @@ export class WebRtcManager {
     return this.state
   }
 
+  public getSessionId(): string {
+    return this.sessionId
+  }
+
+  public getMyDeviceId(): string {
+    return this.myDeviceId
+  }
+
   public isOpen(): boolean {
     return this.state === 'connected' && this.dataChannel?.readyState === 'open'
   }

@@ -139,6 +139,17 @@ class MockWebSocket {
   }
 }
 
+async function waitFor(fn: () => boolean, timeoutMs = 2000, intervalMs = 25): Promise<void> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    if (fn()) return
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+  if (!fn()) {
+    throw new Error(`Timeout waiting for condition after ${timeoutMs}ms`)
+  }
+}
+
 describe('GATE-05: Multi-Device E2EE Real-Time Editor Synchronization', () => {
   it('pairs two independent browser devices and bi-directionally syncs encrypted edits', async () => {
     const relay = new SimulatedRelay()
@@ -172,7 +183,7 @@ describe('GATE-05: Multi-Device E2EE Real-Time Editor Synchronization', () => {
     await serviceB.joinSession(stateA.sessionId!, '849608')
 
     // Allow event loops for SAS derivation and peer exchange
-    await new Promise((r) => setTimeout(r, 200))
+    await waitFor(() => serviceA.getState().phase === 'paired' && serviceB.getState().phase === 'paired')
 
     // Verify both devices are now PAIRED
     expect(serviceA.getState().phase).toBe('paired')
@@ -186,14 +197,14 @@ describe('GATE-05: Multi-Device E2EE Real-Time Editor Synchronization', () => {
 
     // 5. Device A pastes text: "Confidential Project Strategy"
     serviceA.setContentFromLocal('Confidential Project Strategy', true)
-    await new Promise((r) => setTimeout(r, 200))
+    await waitFor(() => serviceB.getContent() === 'Confidential Project Strategy')
 
     // Device B should receive and decrypt automatically!
     expect(serviceB.getContent()).toBe('Confidential Project Strategy')
 
     // 6. Device B replies: "Strategy Approved. Proceed with Phase 5."
     serviceB.setContentFromLocal('Strategy Approved. Proceed with Phase 5.', true)
-    await new Promise((r) => setTimeout(r, 200))
+    await waitFor(() => serviceA.getContent() === 'Strategy Approved. Proceed with Phase 5.')
 
     // Device A should receive and decrypt automatically!
     expect(serviceA.getContent()).toBe('Strategy Approved. Proceed with Phase 5.')

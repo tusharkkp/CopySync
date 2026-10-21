@@ -80,13 +80,13 @@ export class WebSocketClient {
       this.connect()
     }
 
-    if (this.ws?.readyState === 1) {
+    if ((this.ws?.readyState as number) === 1) {
       this.setStatus('connected')
       return
     }
 
     return new Promise<void>((resolve, reject) => {
-      if (this.status === 'connected' || this.ws?.readyState === 1) {
+      if (this.status === 'connected' || (this.ws?.readyState as number) === 1) {
         if (this.status !== 'connected') this.setStatus('connected')
         resolve()
         return

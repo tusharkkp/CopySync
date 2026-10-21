@@ -81,6 +81,13 @@ switch ($Mode) {
         Run-InfraChecks
         Run-Security
     }
+    "10" {
+        Write-Host "Running Phase 10: CI/CD, Frontend Deploy & Cost Review Gate..." -ForegroundColor Cyan
+        Run-FrontendFast
+        Run-BackendFast
+        Run-InfraChecks
+        Run-Security
+    }
     default {
         Write-Host "Running Mode $Mode..."
         Run-FrontendFast

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { WebRtcManager, SignalingSender } from '../WebRtcManager'
+import { WebRtcManager, type SignalingSender } from '../WebRtcManager'
 
 class MockRTCDataChannel {
   public label: string
