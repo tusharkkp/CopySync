@@ -186,6 +186,22 @@ export const PairingBar: React.FC<PairingBarProps> = ({
               Session: <code>{state.sessionId}</code>
             </div>
 
+            <div
+              className={`transport-badge transport-${state.transportMode}`}
+              data-testid="transport-badge"
+              title={
+                state.transportMode === 'direct'
+                  ? 'Zero-hop WebRTC DataChannel (Direct P2P)'
+                  : 'WebSocket Relay via API Gateway'
+              }
+            >
+              {state.transportMode === 'direct' ? (
+                <>🟢 Direct P2P</>
+              ) : (
+                <>⚡ Relay {state.webrtcStatus === 'connecting' ? '(P2P connecting...)' : ''}</>
+              )}
+            </div>
+
             {state.sas && (
               <div className="sas-fingerprint" title="Safety Fingerprint / Short Authentication String (SAS)">
                 <span className="sas-label">Fingerprint:</span>

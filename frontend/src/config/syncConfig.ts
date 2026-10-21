@@ -42,6 +42,16 @@ export const SYNC_CONFIG = {
 
   /** Sliding reassembly expiration window for chunked messages (30 seconds) */
   CHUNK_REASSEMBLY_WINDOW_MS: 30 * 1000,
+
+  /** Public STUN servers for WebRTC ICE candidate gathering (DEC-010) */
+  STUN_SERVERS: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+  ] as RTCIceServer[],
+
+  /** WebRTC direct connection negotiation timeout before falling back to relay (10 seconds) */
+  WEBRTC_CONNECT_TIMEOUT_MS: 10 * 1000,
 } as const
 
 export type SyncConfig = typeof SYNC_CONFIG

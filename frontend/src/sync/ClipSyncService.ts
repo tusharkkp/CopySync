@@ -7,10 +7,12 @@ import {
   WireMessage,
 } from '../crypto/types'
 import { WebSocketClient, WebSocketStatus } from '../transport/WebSocketClient'
+import { WebRtcManager, WebRtcOptions, WebRtcState } from '../webrtc/WebRtcManager'
 import { SYNC_CONFIG } from '../config/syncConfig'
 
 export type StorageMode = 'ephemeral' | 'temporary' | 'history'
 export type SessionPhase = 'unpaired' | 'creating' | 'joining' | 'waiting_for_peer' | 'paired'
+export type TransportMode = 'direct' | 'relay'
 
 export interface ClipSyncState {
   deviceId: string
@@ -25,6 +27,8 @@ export interface ClipSyncState {
   isSyncing: boolean
   lastSyncedAt: Date | null
   error: string | null
+  transportMode: TransportMode
+  webrtcStatus: WebRtcState
 }
 
 export type StateListener = (state: ClipSyncState) => void
@@ -35,6 +39,7 @@ export class ClipSyncService {
   private wsClient: WebSocketClient
   private deviceId: string
   private deviceKeys: DeviceKeyMaterial | null = null
+  private webRtcFactory: (options: WebRtcOptions) => WebRtcManager
 
   private sessionId: string | null = null
   private pairingCode: string | null = null
@@ -47,10 +52,18 @@ export class ClipSyncService {
   private lastSyncedAt: Date | null = null
   private error: string | null = null
 
+  private transportMode: TransportMode = 'relay'
+  private webrtcStatus: WebRtcState = 'idle'
+  private webRtcManager: WebRtcManager | null = null
+
   private content = ''
   private lastSyncedContent = ''
   private typingDebounceTimer: ReturnType<typeof setTimeout> | null = null
   private maxIntervalTimer: ReturnType<typeof setTimeout> | null = null
+
+  private processedMessageIds = new Set<string>()
+  private messageIdHistory: string[] = []
+  private readonly MAX_SEEN_MESSAGES = 100
 
   private stateListeners = new Set<StateListener>()
   private contentListeners = new Set<ContentListener>()
@@ -60,10 +73,12 @@ export class ClipSyncService {
   constructor(
     cryptoProvider: CryptoProvider,
     wsClient: WebSocketClient,
-    deviceId?: string
+    deviceId?: string,
+    webRtcFactory?: (options: WebRtcOptions) => WebRtcManager
   ) {
     this.cryptoProvider = cryptoProvider
     this.wsClient = wsClient
+    this.webRtcFactory = webRtcFactory ?? ((options) => new WebRtcManager(options))
     this.deviceId =
       deviceId ||
       (typeof crypto !== 'undefined' && crypto.randomUUID
@@ -87,6 +102,8 @@ export class ClipSyncService {
       isSyncing: this.isSyncing,
       lastSyncedAt: this.lastSyncedAt,
       error: this.error,
+      transportMode: this.transportMode,
+      webrtcStatus: this.webrtcStatus,
     }
   }
 
@@ -171,6 +188,12 @@ export class ClipSyncService {
   }
 
   public leaveSession(): void {
+    if (this.webRtcManager) {
+      this.webRtcManager.close()
+      this.webRtcManager = null
+    }
+    this.transportMode = 'relay'
+    this.webrtcStatus = 'idle'
     this.sessionId = null
     this.pairingCode = null
     this.peers = {}
@@ -257,7 +280,21 @@ export class ClipSyncService {
         sessionId: this.sessionId,
       }
 
-      const sent = this.wsClient.send(wireFrame as unknown as Record<string, unknown>)
+      let sent = false
+      // Prefer WebRTC direct zero-hop DataChannel if connected
+      if (this.webRtcManager && this.webRtcManager.isOpen()) {
+        sent = this.webRtcManager.send(JSON.stringify(wireFrame))
+        if (sent) {
+          this.transportMode = 'direct'
+        }
+      }
+
+      // Fall back to WebSocket relay if direct path is not open
+      if (!sent) {
+        sent = this.wsClient.send(wireFrame as unknown as Record<string, unknown>)
+        this.transportMode = 'relay'
+      }
+
       if (sent) {
         this.lastSyncedContent = this.content
         this.lastSyncedAt = new Date()
@@ -289,10 +326,18 @@ export class ClipSyncService {
 
   public destroy(): void {
     this.clearDebounceTimers()
+    if (this.webRtcManager) {
+      this.webRtcManager.close()
+      this.webRtcManager = null
+    }
     if (this.unsubscribeWsMessage) this.unsubscribeWsMessage()
     if (this.unsubscribeWsStatus) this.unsubscribeWsStatus()
     this.stateListeners.clear()
     this.contentListeners.clear()
+  }
+
+  public getWebRtcManager(): WebRtcManager | null {
+    return this.webRtcManager
   }
 
   private initWebSocketListeners(): void {
@@ -346,6 +391,11 @@ export class ClipSyncService {
         }
         this.phase = 'paired'
 
+        // Initiate WebRTC Direct DataChannel negotiation (DEC-010) immediately
+        // Deterministic role: lexicographically smaller deviceId acts as initiator to prevent glare
+        const isInitiator = this.deviceId < peerDeviceId
+        this.setupWebRtc(peerDeviceId, isInitiator)
+
         // Derive SAS Fingerprint (DEC-007)
         if (this.sessionId && this.deviceKeys) {
           try {
@@ -369,13 +419,35 @@ export class ClipSyncService {
       return
     }
 
-    // 4. Inbound clipboard.update payload
+    // 4. Inbound WebRTC signaling frame (offer, answer, ice)
+    if (
+      action &&
+      (action === 'signaling.offer' || action === 'signaling.answer' || action === 'signaling.ice')
+    ) {
+      const fromDeviceId = (msg.deviceId as string) || (msg.senderDeviceId as string)
+      if (fromDeviceId && msg.signal) {
+        if (!this.webRtcManager) {
+          this.setupWebRtc(fromDeviceId, false)
+        }
+        if (this.webRtcManager) {
+          void this.webRtcManager.handleSignaling(action, fromDeviceId, msg.signal)
+        }
+      }
+      return
+    }
+
+    // 5. Inbound clipboard.update payload
     if (action === 'clipboard.update' && msg.header && msg.payload) {
       const wireMsg = msg as unknown as WireMessage
       const senderDeviceId = wireMsg.header.senderDeviceId
 
       // Echo loop prevention: ignore snapshots generated by myself
       if (senderDeviceId === this.deviceId) {
+        return
+      }
+
+      // Duplicate suppression across paths (SEC-14 / Phase 6)
+      if (wireMsg.header.messageId && !this.markMessageProcessed(wireMsg.header.messageId)) {
         return
       }
 
@@ -419,6 +491,59 @@ export class ClipSyncService {
     }
   }
 
+  private setupWebRtc(targetDeviceId: string, isInitiator: boolean): void {
+    if (!this.sessionId) return
+
+    if (this.webRtcManager) {
+      const currentState = this.webRtcManager.getState()
+      if (currentState === 'connected' || currentState === 'connecting') {
+        return
+      }
+      this.webRtcManager.close()
+    }
+
+    this.webRtcManager = this.webRtcFactory({
+      sessionId: this.sessionId,
+      myDeviceId: this.deviceId,
+      targetDeviceId,
+      isInitiator,
+      signalingSender: {
+        sendSignaling: (action, target, signal) => this.sendSignaling(action, target, signal),
+      },
+    })
+
+    this.webRtcManager.onStateChange((state) => {
+      this.webrtcStatus = state
+      this.transportMode = state === 'connected' ? 'direct' : 'relay'
+      this.notifyState()
+    })
+
+    this.webRtcManager.onMessage((data) => {
+      try {
+        const parsed = JSON.parse(data) as Record<string, unknown>
+        this.transportMode = 'direct'
+        void this.handleInboundMessage(parsed)
+      } catch (e) {
+        console.warn('[ClipSyncService] Failed to parse direct P2P message:', e)
+      }
+    })
+
+    this.webRtcManager.start()
+  }
+
+  private sendSignaling(action: string, targetDeviceId: string, signal: unknown): boolean {
+    if (!this.sessionId) return false
+    return this.wsClient.send({
+      v: 1,
+      action,
+      requestId: 'sig-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      sessionId: this.sessionId,
+      deviceId: this.deviceId,
+      targetDeviceId,
+      signal,
+    })
+  }
+
   private setSyncing(syncing: boolean): void {
     if (this.isSyncing !== syncing) {
       this.isSyncing = syncing
@@ -435,6 +560,19 @@ export class ClipSyncService {
       clearTimeout(this.maxIntervalTimer)
       this.maxIntervalTimer = null
     }
+  }
+
+  private markMessageProcessed(messageId: string): boolean {
+    if (this.processedMessageIds.has(messageId)) {
+      return false
+    }
+    this.processedMessageIds.add(messageId)
+    this.messageIdHistory.push(messageId)
+    if (this.messageIdHistory.length > this.MAX_SEEN_MESSAGES) {
+      const oldest = this.messageIdHistory.shift()
+      if (oldest) this.processedMessageIds.delete(oldest)
+    }
+    return true
   }
 
   private notifyState(): void {

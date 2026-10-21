@@ -16,6 +16,8 @@ const defaultState: ClipSyncState = {
   isSyncing: false,
   lastSyncedAt: null,
   error: null,
+  transportMode: 'relay',
+  webrtcStatus: 'idle',
 }
 
 describe('UI: PairingBar Component', () => {
@@ -116,5 +118,37 @@ describe('UI: PairingBar Component', () => {
     expect(screen.getByText(/Paired: 1 Peer Active/i)).toBeInTheDocument()
     expect(screen.getByTestId('sas-emojis')).toHaveTextContent('🐶 🐱 🐭 🐹')
     expect(screen.getByText('A1B2C3D4E5F6')).toBeInTheDocument()
+    expect(screen.getByTestId('transport-badge')).toHaveTextContent(/Relay/i)
+  })
+
+  it('displays direct P2P transport badge when connected over WebRTC', () => {
+    const directState: ClipSyncState = {
+      ...defaultState,
+      phase: 'paired',
+      sessionId: 'sess-live-01',
+      transportMode: 'direct',
+      webrtcStatus: 'connected',
+      peers: {
+        'dev-phone-02': {
+          deviceId: 'dev-phone-02',
+          publicSigningKeyB64: 'key-a',
+          publicHpkeKeyB64: 'key-b',
+        },
+      },
+    }
+
+    render(
+      <PairingBar
+        state={directState}
+        onCreateSession={vi.fn()}
+        onJoinSession={vi.fn()}
+        onLeaveSession={vi.fn()}
+      />
+    )
+
+    const badge = screen.getByTestId('transport-badge')
+    expect(badge).toBeInTheDocument()
+    expect(badge).toHaveTextContent(/Direct P2P/i)
+    expect(badge).toHaveClass('transport-direct')
   })
 })
