@@ -245,3 +245,334 @@ body {
 .separator {
   color: var(--border-color);
 }
+
+/* ============================================================================
+   Pairing Bar & Session Controls
+   ============================================================================ */
+.pairing-bar {
+  margin-bottom: 20px;
+}
+
+.pairing-unpaired-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.pairing-action-group {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.pairing-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #ffffff;
+  border-color: #4f46e5;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.btn-secondary:hover {
+  background-color: #2e3547;
+  border-color: #4b5563;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: transparent;
+}
+
+.btn-ghost:hover {
+  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.btn-tiny {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.btn-danger {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.btn-danger:hover {
+  background-color: rgba(239, 68, 68, 0.25);
+}
+
+.pairing-join-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.form-group input {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 14px;
+  outline: none;
+  font-family: var(--font-mono);
+}
+
+.form-group input:focus {
+  border-color: var(--border-focus);
+}
+
+.form-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.pairing-status-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.pairing-waiting-card {
+  background: linear-gradient(180deg, #1e2230 0%, #151823 100%);
+  border: 1px solid var(--border-focus);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
+  border-radius: 12px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.waiting-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #6366f1;
+  box-shadow: 0 0 10px #6366f1;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.7; }
+}
+
+.pairing-credentials {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.credential-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.credential-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.code-display {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  color: #38bdf8;
+  background-color: rgba(56, 189, 248, 0.1);
+  padding: 4px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.session-id-display {
+  font-size: 14px;
+  color: var(--text-secondary);
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.copy-notice {
+  font-size: 12px;
+  color: #10b981;
+  font-weight: 600;
+}
+
+.waiting-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 12px;
+}
+
+.waiting-instructions {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pairing-active-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 10px;
+  padding: 12px 20px;
+}
+
+.active-session-meta {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.active-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #10b981;
+}
+
+.active-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
+.session-tag {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.session-tag code {
+  color: var(--text-secondary);
+}
+
+.sas-fingerprint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sas-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.sas-emojis {
+  font-size: 16px;
+  letter-spacing: 2px;
+}
+
+.sas-hex {
+  font-size: 11px;
+  color: #a5b4fc;
+}
+
+.active-session-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sync-pulse {
+  font-size: 12px;
+  color: #38bdf8;
+  font-weight: 600;
+  animation: pulse 1s infinite;
+}
+
+.pairing-error-banner {
+  margin-top: 10px;
+  padding: 10px 16px;
+  background-color: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  color: #f87171;
+  font-size: 13px;
+}
+

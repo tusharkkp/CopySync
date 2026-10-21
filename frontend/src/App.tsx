@@ -1,17 +1,37 @@
 import React, { useState, useCallback } from 'react'
 import { SYNC_CONFIG } from './config/syncConfig'
 import { CryptoDemo } from './components/CryptoDemo'
+import { PairingBar } from './components/PairingBar'
+import { useClipSync } from './sync/useClipSync'
+import { StorageMode } from './sync/ClipSyncService'
 import './App.css'
 
-export type StorageMode = 'ephemeral' | 'temporary' | 'history'
+export type { StorageMode }
 export type ConnectionState = 'offline' | 'connecting' | 'direct' | 'relay'
 export type ActiveView = 'editor' | 'crypto-demo'
 
 export const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ActiveView>('editor')
-  const [content, setContent] = useState<string>('')
   const [storageMode, setStorageMode] = useState<StorageMode>('ephemeral')
-  const [connectionState] = useState<ConnectionState>('offline')
+
+  const {
+    content,
+    setContent,
+    state,
+    createSession,
+    joinSession,
+    leaveSession,
+  } = useClipSync()
+
+  // Map state to legacy ConnectionState for badge styling
+  const connectionState: ConnectionState =
+    state.phase === 'paired'
+      ? 'direct'
+      : state.connectionStatus === 'connected'
+        ? 'relay'
+        : state.connectionStatus === 'connecting' || state.connectionStatus === 'reconnecting'
+          ? 'connecting'
+          : 'offline'
 
   // Calculate byte length strictly using UTF-8 TextEncoder per ADR-014
   const byteCount = new TextEncoder().encode(content).length
@@ -26,12 +46,10 @@ export const App: React.FC = () => {
       // Per ADR-004: Paste events synchronize immediately (bypassing debounce)
       const pastedText = e.clipboardData.getData('text')
       if (pastedText) {
-        console.info('[ClipSync] Paste event received:', {
-          length: pastedText.length,
-        })
+        setContent(pastedText, true)
       }
     },
-    []
+    [setContent]
   )
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -91,6 +109,13 @@ export const App: React.FC = () => {
       <main className="editor-container">
         {activeView === 'editor' ? (
           <>
+            <PairingBar
+              state={state}
+              onCreateSession={() => createSession(storageMode)}
+              onJoinSession={joinSession}
+              onLeaveSession={leaveSession}
+            />
+
             <div className="editor-toolbar">
               <div className="metrics">
                 <span
