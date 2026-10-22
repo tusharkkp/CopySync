@@ -321,7 +321,7 @@ export const App: React.FC = () => {
                 href="https://github.com/tusharkkp"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="github-link"
+                className="footer-copy"
               >
                 Tushar Kaldate
               </a>
