@@ -192,7 +192,7 @@ export const App: React.FC = () => {
             <section className="section-head">
               <h2 className="section-title">Zero-knowledge clipboard synchronization</h2>
               <p className="section-lead">
-                Instantly synchronize text and credentials across your devices with{' '}
+                Instantly synchronize Content across your devices with{' '}
                 <span className="highlight">provable end-to-end encryption</span>.
               </p>
             </section>
@@ -314,7 +314,18 @@ export const App: React.FC = () => {
             <span>Direct WebRTC DataChannel with WebSocket relay fallback</span>
           </div>
           <div className="footer-copy">
-            <span>ClipSync Secure Privacy Core</span>
+            {/* <span>By Tushar Kaldate</span> */}
+            <span>
+              By{" "}
+              <a
+                href="https://github.com/tusharkkp"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="github-link"
+              >
+                Tushar Kaldate
+              </a>
+            </span>
           </div>
         </div>
       </footer>
