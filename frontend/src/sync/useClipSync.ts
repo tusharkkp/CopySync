@@ -98,12 +98,25 @@ export function useClipSync(options: UseClipSyncOptions = {}) {
     service.clearConflicts()
   }, [service])
 
+  const joinSessionAuto = useCallback(
+    async (sessionId: string, autoPairingToken: string) => {
+      await service.joinSessionAuto(sessionId, autoPairingToken)
+    },
+    [service]
+  )
+
+  const probeNearby = useCallback(async () => {
+    return await service.probeLocalNetwork()
+  }, [service])
+
   return {
     content,
     setContent,
     state,
     createSession,
     joinSession,
+    joinSessionAuto,
+    probeNearby,
     resumeSession,
     closeSession,
     leaveSession,

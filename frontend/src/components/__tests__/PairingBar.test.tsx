@@ -9,6 +9,8 @@ const defaultState: ClipSyncState = {
   sessionId: null,
   pairingCode: null,
   storageMode: 'ephemeral',
+  retentionDays: 30,
+  revisions: [],
   phase: 'unpaired',
   peers: {},
   sas: null,
@@ -18,6 +20,11 @@ const defaultState: ClipSyncState = {
   error: null,
   transportMode: 'relay',
   webrtcStatus: 'idle',
+  pendingQueueLength: 0,
+  conflicts: [],
+  keyEpoch: 1,
+  nearbyPeer: null,
+  isProbingNearby: false,
 }
 
 describe('UI: PairingBar Component', () => {
@@ -150,5 +157,40 @@ describe('UI: PairingBar Component', () => {
     expect(badge).toBeInTheDocument()
     expect(badge).toHaveTextContent(/Direct P2P/i)
     expect(badge).toHaveClass('transport-direct')
+  })
+
+  it('renders ambient nearby discovery card when peer on same Wi-Fi is detected and triggers onJoinAutoSession', () => {
+    const onJoinAuto = vi.fn()
+    const nearbyState: ClipSyncState = {
+      ...defaultState,
+      phase: 'unpaired',
+      nearbyPeer: {
+        sessionId: 'sess-wifi-99',
+        hostDeviceId: 'dev-laptop-host',
+        hostDeviceName: 'MacBook Air',
+        autoPairingToken: 'autotok-999',
+      },
+      isProbingNearby: false,
+    }
+
+    render(
+      <PairingBar
+        state={nearbyState}
+        onCreateSession={vi.fn()}
+        onJoinSession={vi.fn()}
+        onJoinAutoSession={onJoinAuto}
+        onLeaveSession={vi.fn()}
+      />
+    )
+
+    expect(screen.getByTestId('nearby-discovery-card')).toBeInTheDocument()
+    expect(screen.getByText('MacBook Air')).toBeInTheDocument()
+    expect(screen.getByText(/Same Wi-Fi Network Detected/i)).toBeInTheDocument()
+
+    const connectBtn = screen.getByTestId('btn-connect-nearby')
+    expect(connectBtn).toBeInTheDocument()
+    fireEvent.click(connectBtn)
+
+    expect(onJoinAuto).toHaveBeenCalledWith('sess-wifi-99', 'autotok-999')
   })
 })

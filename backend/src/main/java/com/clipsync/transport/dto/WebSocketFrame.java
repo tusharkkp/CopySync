@@ -20,6 +20,8 @@ public record WebSocketFrame(
     JsonNode keyEnvelopes,
     Integer retentionDays,
     String targetDeviceId,
-    JsonNode signal
+    JsonNode signal,
+    String autoPairingToken,
+    String deviceName
 ) {
 }

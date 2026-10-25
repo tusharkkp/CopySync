@@ -116,6 +116,11 @@ public class DynamoDbConfig {
     }
 
     @Bean
+    public com.clipsync.discovery.IpDiscoveryRepository ipDiscoveryRepository(DynamoDbClient client) {
+        return new com.clipsync.discovery.DynamoDbIpDiscoveryRepository(client, registryTableName);
+    }
+
+    @Bean
     public com.clipsync.transport.router.ClipSyncRouter clipSyncRouter(
         SessionRepository sessionRepository,
         DeviceRepository deviceRepository,
@@ -124,7 +129,8 @@ public class DynamoDbConfig {
         ClipboardRepository clipboardRepository,
         com.clipsync.transport.sender.WebSocketSender webSocketSender,
         com.clipsync.transport.validation.FrameValidator frameValidator,
-        com.fasterxml.jackson.databind.ObjectMapper objectMapper
+        com.fasterxml.jackson.databind.ObjectMapper objectMapper,
+        com.clipsync.discovery.IpDiscoveryRepository ipDiscoveryRepository
     ) {
         return new com.clipsync.transport.router.ClipSyncRouter(
             sessionRepository,
@@ -134,7 +140,8 @@ public class DynamoDbConfig {
             clipboardRepository,
             webSocketSender,
             frameValidator,
-            objectMapper
+            objectMapper,
+            ipDiscoveryRepository
         );
     }
 }

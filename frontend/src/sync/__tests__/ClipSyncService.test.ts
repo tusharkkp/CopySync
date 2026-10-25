@@ -528,4 +528,84 @@ describe('SYNC: ClipSyncService Domain Suite', () => {
     expect(finalState.phase).toBe('unpaired')
     expect(finalState.error).toContain('revoked')
   })
+
+  it('announces local network on session creation and probes nearby peers', async () => {
+    await service.createSession('ephemeral')
+    const createReq = JSON.parse(mockWs.sentData[0])
+
+    mockWs.simulateMessage({
+      status: 'OK',
+      action: 'session.create',
+      data: { sessionId: createReq.sessionId, pairingCode: '112233', keyEpoch: 1 },
+    })
+
+    expect(mockWs.sentData.length).toBe(2)
+    const announceReq = JSON.parse(mockWs.sentData[1])
+    expect(announceReq.action).toBe('ip.announce')
+    expect(announceReq.sessionId).toBe(createReq.sessionId)
+    expect(announceReq.deviceId).toBe('dev-laptop-01')
+    expect(announceReq.publicSigningKeyB64).toBeDefined()
+  })
+
+  it('probes for nearby devices on same Wi-Fi and connects via joinSessionAuto', async () => {
+    mockWs.sentData = []
+    await service.probeLocalNetwork()
+
+    expect(mockWs.sentData.length).toBe(1)
+    const probeReq = JSON.parse(mockWs.sentData[0])
+    expect(probeReq.action).toBe('ip.probe')
+    expect(probeReq.deviceId).toBe('dev-laptop-01')
+
+    mockWs.simulateMessage({
+      status: 'OK',
+      action: 'ip.probe',
+      data: {
+        found: true,
+        sessionId: 'sess-wifi-01',
+        hostDeviceId: 'dev-macbook-host',
+        hostDeviceName: 'MacBook Pro',
+        autoPairingToken: 'autotok-123456789',
+        publicSigningKeyB64: 'host-sig-key',
+        publicHpkeKeyB64: 'host-hpke-key',
+      },
+    })
+
+    const state = service.getState()
+    expect(state.nearbyPeer).toBeDefined()
+    expect(state.nearbyPeer?.sessionId).toBe('sess-wifi-01')
+    expect(state.nearbyPeer?.hostDeviceName).toBe('MacBook Pro')
+    expect(state.nearbyPeer?.autoPairingToken).toBe('autotok-123456789')
+
+    mockWs.sentData = []
+    await service.joinSessionAuto('sess-wifi-01', 'autotok-123456789')
+
+    expect(mockWs.sentData.length).toBe(1)
+    const autoJoinReq = JSON.parse(mockWs.sentData[0])
+    expect(autoJoinReq.action).toBe('session.join_auto')
+    expect(autoJoinReq.sessionId).toBe('sess-wifi-01')
+    expect(autoJoinReq.autoPairingToken).toBe('autotok-123456789')
+    expect(autoJoinReq.publicSigningKeyB64).toBeDefined()
+
+    mockWs.simulateMessage({
+      status: 'OK',
+      action: 'session.join_auto',
+      data: {
+        sessionId: 'sess-wifi-01',
+        status: 'ACTIVE',
+        keyEpoch: 1,
+        peers: [
+          {
+            deviceId: 'dev-macbook-host',
+            publicSigningKeyB64: 'host-sig-key',
+            publicHpkeKeyB64: 'host-hpke-key',
+          },
+        ],
+      },
+    })
+
+    const finalState = service.getState()
+    expect(finalState.phase).toBe('paired')
+    expect(finalState.nearbyPeer).toBeNull()
+    expect(finalState.peers['dev-macbook-host']).toBeDefined()
+  })
 })

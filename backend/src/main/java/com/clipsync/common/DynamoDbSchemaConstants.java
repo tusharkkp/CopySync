@@ -18,6 +18,7 @@ public final class DynamoDbSchemaConstants {
     // PK Prefixes
     public static final String PK_SESSION_PREFIX = "SESSION#";
     public static final String PK_CONNECTION_PREFIX = "CONNECTION#";
+    public static final String PK_IP_PREFIX = "IP#";
 
     // SK Prefixes & Constants
     public static final String SK_METADATA = "METADATA";
@@ -25,6 +26,7 @@ public final class DynamoDbSchemaConstants {
     public static final String SK_CONNECTION_PREFIX = "CONNECTION#";
     public static final String SK_PAIRING_PREFIX = "PAIRING#";
     public static final String SK_ITEM_PREFIX = "ITEM#";
+    public static final String SK_IP_DISCOVERY = "DISCOVERY";
 
     // Common Attributes
     public static final String ATTR_SESSION_ID = "sessionId";
@@ -44,12 +46,14 @@ public final class DynamoDbSchemaConstants {
     public static final String ATTR_PUBLIC_SIGNING_KEY = "publicSigningKeyB64";
     public static final String ATTR_PUBLIC_HPKE_KEY = "publicHpkeKeyB64";
     public static final String ATTR_DEVICE_ROLE = "role";
+    public static final String ATTR_DEVICE_NAME = "deviceName";
 
     // Pairing Attributes
     public static final String ATTR_INITIATOR_DEVICE_ID = "initiatorDeviceId";
     public static final String ATTR_TOKEN_HASH = "tokenHash";
     public static final String ATTR_ATTEMPT_COUNT = "attemptCount";
     public static final String ATTR_CONSUMED = "consumed";
+    public static final String ATTR_AUTO_PAIRING_TOKEN = "autoPairingToken";
 
     // Clipboard Attributes
     public static final String ATTR_MESSAGE_ID = "messageId";

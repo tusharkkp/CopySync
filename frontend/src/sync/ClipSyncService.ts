@@ -34,6 +34,15 @@ export interface ConflictRecord {
   plaintext: string
 }
 
+export interface NearbyPeerInfo {
+  sessionId: string
+  hostDeviceId: string
+  hostDeviceName: string
+  autoPairingToken: string
+  publicSigningKeyB64?: string
+  publicHpkeKeyB64?: string
+}
+
 export interface ClipSyncState {
   deviceId: string
   connectionStatus: WebSocketStatus
@@ -54,6 +63,8 @@ export interface ClipSyncState {
   pendingQueueLength: number
   conflicts: ConflictRecord[]
   keyEpoch: number
+  nearbyPeer: NearbyPeerInfo | null
+  isProbingNearby: boolean
 }
 
 export type StateListener = (state: ClipSyncState) => void
@@ -82,6 +93,17 @@ export class ClipSyncService {
   private transportMode: TransportMode = 'relay'
   private webrtcStatus: WebRtcState = 'idle'
   private webRtcManager: WebRtcManager | null = null
+
+  private nearbyPeer: NearbyPeerInfo | null = null
+  private isProbingNearby = false
+  private deviceName: string =
+    typeof navigator !== 'undefined' && navigator.userAgent
+      ? navigator.userAgent.includes('Mac')
+        ? 'MacBook'
+        : navigator.userAgent.includes('Windows')
+        ? 'Windows PC'
+        : 'Browser Client'
+      : 'Web Device'
 
   // Phase 8: Offline Queue, Conflicts, Key Epoch
   private keyEpoch = 1
@@ -143,6 +165,8 @@ export class ClipSyncService {
       pendingQueueLength: this.pendingQueue.length,
       conflicts: [...this.conflicts],
       keyEpoch: this.keyEpoch,
+      nearbyPeer: this.nearbyPeer ? { ...this.nearbyPeer } : null,
+      isProbingNearby: this.isProbingNearby,
     }
   }
 
@@ -225,6 +249,80 @@ export class ClipSyncService {
     }
   }
 
+  public async joinSessionAuto(targetSessionId: string, autoPairingToken: string): Promise<void> {
+    this.error = null
+    this.phase = 'joining'
+    this.notifyState()
+
+    try {
+      const keys = await this.initKeys()
+      await this.wsClient.ensureConnected()
+
+      const requestId = 'req-ja-' + Date.now()
+      const joinFrame = {
+        v: 1,
+        action: 'session.join_auto',
+        requestId,
+        sessionId: targetSessionId.trim(),
+        autoPairingToken: autoPairingToken.trim(),
+        deviceId: this.deviceId,
+        publicSigningKeyB64: keys.publicSigningKeyB64,
+        publicHpkeKeyB64: keys.publicHpkeKeyB64,
+      }
+
+      this.sessionId = targetSessionId.trim()
+      this.wsClient.send(joinFrame)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to join session automatically'
+      this.error = message
+      this.phase = 'unpaired'
+      this.notifyState()
+    }
+  }
+
+  public announceLocalNetwork(targetSessionId?: string | null, keys?: DeviceKeyMaterial): void {
+    const sessId = targetSessionId || this.sessionId
+    const keyMaterial = keys || this.deviceKeys
+    if (!sessId || !keyMaterial) return
+
+    const requestId = 'req-ann-' + Date.now()
+    const frame = {
+      v: 1,
+      action: 'ip.announce',
+      requestId,
+      sessionId: sessId,
+      deviceId: this.deviceId,
+      deviceName: this.deviceName,
+      publicSigningKeyB64: keyMaterial.publicSigningKeyB64,
+      publicHpkeKeyB64: keyMaterial.publicHpkeKeyB64,
+    }
+    this.wsClient.send(frame)
+  }
+
+  public async probeLocalNetwork(): Promise<NearbyPeerInfo | null> {
+    if (this.phase !== 'unpaired') {
+      return null
+    }
+    this.isProbingNearby = true
+    this.notifyState()
+
+    try {
+      await this.wsClient.ensureConnected()
+      const requestId = 'req-prb-' + Date.now()
+      const frame = {
+        v: 1,
+        action: 'ip.probe',
+        requestId,
+        deviceId: this.deviceId,
+      }
+      this.wsClient.send(frame)
+    } catch {
+      this.isProbingNearby = false
+      this.notifyState()
+    }
+    return this.nearbyPeer
+  }
+
   public async resumeSession(targetSessionId: string): Promise<void> {
     this.error = null
     this.phase = 'joining'
@@ -286,6 +384,8 @@ export class ClipSyncService {
     this.conflicts = []
     this.keyEpoch = 1
     this.lastSyncedMessageId = null
+    this.nearbyPeer = null
+    this.isProbingNearby = false
     this.clearDebounceTimers()
     this.notifyState()
   }
@@ -293,6 +393,9 @@ export class ClipSyncService {
   public connect(): void {
     if (this.wsClient.getStatus() !== 'connected') {
       this.wsClient.connect()
+    }
+    if (this.phase === 'unpaired') {
+      void this.probeLocalNetwork()
     }
   }
 
@@ -553,11 +656,12 @@ export class ClipSyncService {
       }
       this.phase = 'waiting_for_peer'
       this.notifyState()
+      this.announceLocalNetwork(this.sessionId)
       return
     }
 
-    // 2. Inbound session.join acknowledgement
-    if (action === 'session.join') {
+    // 2. Inbound session.join or session.join_auto acknowledgement
+    if (action === 'session.join' || action === 'session.join_auto') {
       if (status === 'OK') {
         if (msg.data) {
           const data = msg.data as Record<string, unknown>
@@ -590,13 +694,47 @@ export class ClipSyncService {
             }
           }
         }
+        this.nearbyPeer = null
         this.phase = 'paired'
         this.notifyState()
       } else {
-        this.error = (msg.errorMessage as string) || 'Failed to join session (invalid code)'
+        this.error =
+          (msg.errorMessage as string) ||
+          (action === 'session.join_auto'
+            ? 'Failed to auto-join nearby session'
+            : 'Failed to join session (invalid code)')
         this.phase = 'unpaired'
         this.notifyState()
       }
+      return
+    }
+
+    // Inbound ip.probe response
+    if (action === 'ip.probe') {
+      this.isProbingNearby = false
+      if (status === 'OK' && msg.data) {
+        const data = msg.data as Record<string, unknown>
+        if (data.found && data.sessionId && data.sessionId !== this.sessionId) {
+          this.nearbyPeer = {
+            sessionId: data.sessionId as string,
+            hostDeviceId: data.hostDeviceId as string,
+            hostDeviceName: (data.hostDeviceName as string) || 'Nearby Device',
+            autoPairingToken: data.autoPairingToken as string,
+            publicSigningKeyB64: data.publicSigningKeyB64 as string | undefined,
+            publicHpkeKeyB64: data.publicHpkeKeyB64 as string | undefined,
+          }
+        } else {
+          this.nearbyPeer = null
+        }
+      } else {
+        this.nearbyPeer = null
+      }
+      this.notifyState()
+      return
+    }
+
+    // Inbound ip.announce response
+    if (action === 'ip.announce') {
       return
     }
 

@@ -15,6 +15,8 @@ export interface PairingBarProps {
   state: ClipSyncState
   onCreateSession: (mode: StorageMode) => void
   onJoinSession: (sessionId: string, pairingCode: string) => void
+  onJoinAutoSession?: (sessionId: string, autoPairingToken: string) => void
+  onProbeNearby?: () => void
   onLeaveSession: () => void
   onCloseSession?: () => void
   onRevokeDevice?: (deviceId: string) => void
@@ -25,6 +27,8 @@ export const PairingBar: React.FC<PairingBarProps> = ({
   state,
   onCreateSession,
   onJoinSession,
+  onJoinAutoSession,
+  onProbeNearby,
   onLeaveSession,
   onCloseSession,
   onRevokeDevice,
@@ -54,6 +58,53 @@ export const PairingBar: React.FC<PairingBarProps> = ({
 
   return (
     <div className="pairing-bar" data-testid="pairing-bar">
+      {/* 0. Ambient Same-Network / Wi-Fi Direct Peer Discovery Card */}
+      {state.phase === 'unpaired' && state.nearbyPeer && (
+        <div className="card-chai pairing-nearby-card" data-testid="nearby-discovery-card">
+          <div className="pairing-nearby-content">
+            <div className="nearby-info-col">
+              <div className="nearby-badge-row">
+                <span className="dot-indicator green pulse" />
+                <span className="caption-text highlight-green">Same Wi-Fi Network Detected</span>
+              </div>
+              <h3 className="nearby-title">
+                {state.nearbyPeer.hostDeviceName || 'Nearby Device'}
+              </h3>
+              <p className="nearby-hint">
+                Found an active clipboard session on your local network. Connect directly with end-to-end encryption without entering a code.
+              </p>
+            </div>
+
+            <div className="nearby-actions-col">
+              {onProbeNearby && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-tiny"
+                  onClick={onProbeNearby}
+                  title="Rescan local Wi-Fi router"
+                  data-testid="btn-rescan-nearby"
+                >
+                  <span>Rescan</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn btn-solid btn-asym nearby-connect-btn"
+                data-testid="btn-connect-nearby"
+                onClick={() => {
+                  if (state.nearbyPeer && onJoinAutoSession) {
+                    onJoinAutoSession(state.nearbyPeer.sessionId, state.nearbyPeer.autoPairingToken)
+                  }
+                }}
+              >
+                <span>Connect Directly</span>
+                <ArrowUpRight className="btn-icon" size={16} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 1. Unpaired Default View */}
       {state.phase === 'unpaired' && !showJoinForm && (
         <div className="card-chai pairing-unpaired-card">
@@ -90,6 +141,18 @@ export const PairingBar: React.FC<PairingBarProps> = ({
               >
                 <span>Join with Code</span>
               </button>
+
+              {onProbeNearby && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={onProbeNearby}
+                  data-testid="btn-scan-wifi"
+                  title="Scan for other devices on the same Wi-Fi router"
+                >
+                  <span>Scan Wi-Fi</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

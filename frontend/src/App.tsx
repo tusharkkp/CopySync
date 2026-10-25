@@ -34,6 +34,8 @@ export const App: React.FC = () => {
     state,
     createSession,
     joinSession,
+    joinSessionAuto,
+    probeNearby,
     closeSession,
     leaveSession,
     revokeDevice,
@@ -111,7 +113,7 @@ export const App: React.FC = () => {
           <div className="header-brand">
             <div className="brand-wordmark">
               <span className="brand-logo" aria-hidden="true">⚡</span>
-              <h1 className="brand-name">Control CV Sync</h1>
+              <h1 className="brand-name">ClipSync</h1>
             </div>
             <AnimatedBadge>
               <span className="badge-preview">E2EE Preview</span>
@@ -202,6 +204,8 @@ export const App: React.FC = () => {
               state={state}
               onCreateSession={() => createSession(storageMode, retentionDays)}
               onJoinSession={joinSession}
+              onJoinAutoSession={joinSessionAuto}
+              onProbeNearby={probeNearby}
               onLeaveSession={leaveSession}
               onCloseSession={closeSession}
               onRevokeDevice={revokeDevice}

@@ -17,6 +17,9 @@ import com.clipsync.storage.ClipboardRepository;
 import com.clipsync.storage.ClipboardSnapshot;
 import com.clipsync.transport.dto.WebSocketFrame;
 import com.clipsync.transport.dto.WebSocketResponse;
+import com.clipsync.discovery.InMemoryIpDiscoveryRepository;
+import com.clipsync.discovery.IpDiscoveryRecord;
+import com.clipsync.discovery.IpDiscoveryRepository;
 import com.clipsync.transport.sender.WebSocketSender;
 import com.clipsync.transport.validation.FrameValidator;
 import com.clipsync.transport.validation.ProtocolErrorCode;
@@ -26,9 +29,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,6 +50,7 @@ public class ClipSyncRouter {
     private final WebSocketSender webSocketSender;
     private final FrameValidator frameValidator;
     private final ObjectMapper objectMapper;
+    private final IpDiscoveryRepository ipDiscoveryRepository;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public ClipSyncRouter(
@@ -55,6 +63,30 @@ public class ClipSyncRouter {
         FrameValidator frameValidator,
         ObjectMapper objectMapper
     ) {
+        this(
+            sessionRepository,
+            deviceRepository,
+            connectionRepository,
+            pairingService,
+            clipboardRepository,
+            webSocketSender,
+            frameValidator,
+            objectMapper,
+            new InMemoryIpDiscoveryRepository()
+        );
+    }
+
+    public ClipSyncRouter(
+        SessionRepository sessionRepository,
+        DeviceRepository deviceRepository,
+        ConnectionRepository connectionRepository,
+        PairingService pairingService,
+        ClipboardRepository clipboardRepository,
+        WebSocketSender webSocketSender,
+        FrameValidator frameValidator,
+        ObjectMapper objectMapper,
+        IpDiscoveryRepository ipDiscoveryRepository
+    ) {
         this.sessionRepository = sessionRepository;
         this.deviceRepository = deviceRepository;
         this.connectionRepository = connectionRepository;
@@ -63,6 +95,7 @@ public class ClipSyncRouter {
         this.webSocketSender = webSocketSender;
         this.frameValidator = frameValidator;
         this.objectMapper = objectMapper;
+        this.ipDiscoveryRepository = ipDiscoveryRepository;
     }
 
     public APIGatewayV2WebSocketResponse handle(APIGatewayV2WebSocketEvent event) {
@@ -74,6 +107,7 @@ public class ClipSyncRouter {
         }
 
         try {
+            String sourceIp = extractSourceIp(event);
             switch (routeKey) {
                 case "$connect":
                     return handleConnect(connectionId);
@@ -81,7 +115,7 @@ public class ClipSyncRouter {
                     return handleDisconnect(connectionId);
                 case "$default":
                 default:
-                    return handleFrame(connectionId, event.getBody());
+                    return handleFrame(connectionId, event.getBody(), sourceIp);
             }
         } catch (ValidationException ve) {
             return buildErrorResponse(400, "unknown", null, ve.getErrorCode(), ve.getMessage());
@@ -110,12 +144,15 @@ public class ClipSyncRouter {
         return resp;
     }
 
-    private APIGatewayV2WebSocketResponse handleFrame(String connectionId, String body) {
+    private APIGatewayV2WebSocketResponse handleFrame(String connectionId, String body, String sourceIp) {
         WebSocketFrame frame = frameValidator.validateJson(body);
 
         return switch (frame.action()) {
             case "session.create" -> handleSessionCreate(connectionId, frame);
             case "session.join" -> handleSessionJoin(connectionId, frame);
+            case "session.join_auto" -> handleSessionJoinAuto(connectionId, frame, sourceIp);
+            case "ip.announce" -> handleIpAnnounce(connectionId, frame, sourceIp);
+            case "ip.probe" -> handleIpProbe(connectionId, frame, sourceIp);
             case "session.close" -> handleSessionClose(connectionId, frame);
             case "sync.resume" -> handleSyncResume(connectionId, frame);
             case "device.revoke" -> handleDeviceRevoke(connectionId, frame);
@@ -203,6 +240,39 @@ public class ClipSyncRouter {
             return buildErrorResponse(401, frame.action(), frame.requestId(), ProtocolErrorCode.INVALID_PAIRING_CODE, "Invalid or expired pairing code");
         }
 
+        return completeSessionJoin(connectionId, frame, session);
+    }
+
+    private APIGatewayV2WebSocketResponse handleSessionJoinAuto(String connectionId, WebSocketFrame frame, String sourceIp) {
+        if (frame.sessionId() == null || frame.autoPairingToken() == null) {
+            return buildErrorResponse(400, frame.action(), frame.requestId(), ProtocolErrorCode.MISSING_PARAMETER, "sessionId and autoPairingToken required");
+        }
+
+        Optional<Session> optSession = sessionRepository.findById(frame.sessionId());
+        if (optSession.isEmpty()) {
+            return buildErrorResponse(404, frame.action(), frame.requestId(), ProtocolErrorCode.SESSION_NOT_FOUND, "Session not found");
+        }
+
+        Session session = optSession.get();
+        if (session.status() == SessionStatus.LOCKED_OUT) {
+            return buildErrorResponse(403, frame.action(), frame.requestId(), ProtocolErrorCode.SESSION_LOCKED_OUT, "Session is permanently locked out");
+        }
+
+        String ipHash = "IP#" + hashIp(sourceIp);
+        Optional<IpDiscoveryRecord> optRecord = ipDiscoveryRepository.findByIpHash(ipHash);
+        if (optRecord.isEmpty()) {
+            return buildErrorResponse(401, frame.action(), frame.requestId(), ProtocolErrorCode.INVALID_PAIRING_CODE, "No active discovery session found on this network");
+        }
+
+        IpDiscoveryRecord record = optRecord.get();
+        if (!record.sessionId().equals(frame.sessionId()) || !record.autoPairingToken().equals(frame.autoPairingToken())) {
+            return buildErrorResponse(401, frame.action(), frame.requestId(), ProtocolErrorCode.INVALID_PAIRING_CODE, "Invalid auto-pairing token for this network");
+        }
+
+        return completeSessionJoin(connectionId, frame, session);
+    }
+
+    private APIGatewayV2WebSocketResponse completeSessionJoin(String connectionId, WebSocketFrame frame, Session session) {
         ObjectNode data = objectMapper.createObjectNode();
         data.put("sessionId", session.sessionId());
         data.put("status", "ACTIVE");
@@ -258,6 +328,107 @@ public class ClipSyncRouter {
         }
 
         return buildOkResponse(frame.action(), frame.requestId(), data);
+    }
+
+    private APIGatewayV2WebSocketResponse handleIpAnnounce(String connectionId, WebSocketFrame frame, String sourceIp) {
+        if (frame.sessionId() == null || frame.deviceId() == null) {
+            return buildErrorResponse(400, frame.action(), frame.requestId(), ProtocolErrorCode.MISSING_PARAMETER, "sessionId and deviceId required");
+        }
+
+        Optional<Session> optSession = sessionRepository.findById(frame.sessionId());
+        if (optSession.isEmpty()) {
+            return buildErrorResponse(404, frame.action(), frame.requestId(), ProtocolErrorCode.SESSION_NOT_FOUND, "Session not found");
+        }
+
+        String ipHash = "IP#" + hashIp(sourceIp);
+        String autoToken = "autotok-" + secureRandom.nextLong(100_000_000L, 999_999_999L);
+        Instant now = Instant.now();
+        Instant expiresAt = now.plus(Duration.ofMinutes(5));
+        long ttl = expiresAt.getEpochSecond();
+
+        String deviceName = (frame.deviceName() != null && !frame.deviceName().isBlank())
+            ? frame.deviceName()
+            : "Nearby Device";
+
+        IpDiscoveryRecord record = new IpDiscoveryRecord(
+            ipHash,
+            frame.sessionId(),
+            frame.deviceId(),
+            deviceName,
+            frame.publicSigningKeyB64(),
+            frame.publicHpkeKeyB64(),
+            autoToken,
+            expiresAt,
+            ttl
+        );
+        ipDiscoveryRepository.save(record);
+
+        ObjectNode data = objectMapper.createObjectNode();
+        data.put("ipHash", ipHash);
+        data.put("sessionId", frame.sessionId());
+        data.put("autoPairingToken", autoToken);
+        data.put("expiresAt", expiresAt.toString());
+
+        return buildOkResponse(frame.action(), frame.requestId(), data);
+    }
+
+    private APIGatewayV2WebSocketResponse handleIpProbe(String connectionId, WebSocketFrame frame, String sourceIp) {
+        String ipHash = "IP#" + hashIp(sourceIp);
+        Optional<IpDiscoveryRecord> optRecord = ipDiscoveryRepository.findByIpHash(ipHash);
+
+        ObjectNode data = objectMapper.createObjectNode();
+        if (optRecord.isPresent()) {
+            IpDiscoveryRecord record = optRecord.get();
+            // Only report if it is a different device ID on the same IP
+            if (frame.deviceId() == null || !frame.deviceId().equals(record.hostDeviceId())) {
+                data.put("found", true);
+                data.put("sessionId", record.sessionId());
+                data.put("hostDeviceId", record.hostDeviceId());
+                data.put("hostDeviceName", record.hostDeviceName());
+                data.put("autoPairingToken", record.autoPairingToken());
+                if (record.publicSigningKeyB64() != null) {
+                    data.put("publicSigningKeyB64", record.publicSigningKeyB64());
+                }
+                if (record.publicHpkeKeyB64() != null) {
+                    data.put("publicHpkeKeyB64", record.publicHpkeKeyB64());
+                }
+            } else {
+                data.put("found", false);
+            }
+        } else {
+            data.put("found", false);
+        }
+
+        return buildOkResponse(frame.action(), frame.requestId(), data);
+    }
+
+    private String extractSourceIp(APIGatewayV2WebSocketEvent event) {
+        if (event != null && event.getRequestContext() != null && event.getRequestContext().getIdentity() != null) {
+            String sourceIp = event.getRequestContext().getIdentity().getSourceIp();
+            if (sourceIp != null && !sourceIp.isBlank()) {
+                return sourceIp;
+            }
+        }
+        if (event != null && event.getHeaders() != null) {
+            String xff = event.getHeaders().get("X-Forwarded-For");
+            if (xff == null) {
+                xff = event.getHeaders().get("x-forwarded-for");
+            }
+            if (xff != null && !xff.isBlank()) {
+                return xff.split(",")[0].trim();
+            }
+        }
+        return "127.0.0.1";
+    }
+
+    private String hashIp(String sourceIp) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(sourceIp.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
     }
 
     private APIGatewayV2WebSocketResponse handleClipboardUpdate(String connectionId, WebSocketFrame frame, String rawBody) {
