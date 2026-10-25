@@ -1,0 +1,29 @@
+enable
+configure terminal
+hostname R_ISP
+no ip domain-lookup
+
+interface GigabitEthernet0/0
+ ip address 203.0.113.9 255.255.255.252
+ no shutdown
+ exit
+
+interface GigabitEthernet0/1
+ ip address 198.51.100.1 255.255.255.252
+ no shutdown
+ exit
+
+interface GigabitEthernet0/2
+ ip address 203.0.113.17 255.255.255.252
+ no shutdown
+ exit
+
+router ospf 1
+ router-id 1.1.1.1
+ network 203.0.113.8 0.0.0.3 area 0
+ network 198.51.100.0 0.0.0.3 area 0
+ network 203.0.113.16 0.0.0.3 area 0
+ exit
+
+end
+write memory

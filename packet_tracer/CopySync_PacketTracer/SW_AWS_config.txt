@@ -1,0 +1,5 @@
+enable
+configure terminal
+hostname SW_AWS
+end
+write memory

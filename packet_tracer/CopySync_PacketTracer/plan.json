@@ -1,0 +1,386 @@
+{
+  "name": "CopySync_Network_Simulation",
+  "devices": [
+    {
+      "name": "R_HOME",
+      "model": "2911",
+      "category": "router",
+      "role": "edge_router",
+      "x": 150,
+      "y": 100,
+      "interfaces": {
+        "GigabitEthernet0/0": "203.0.113.10/30",
+        "GigabitEthernet0/1": "192.168.1.1/24"
+      },
+      "gateway": "",
+      "interfaces_v6": {},
+      "gateway_v6": "",
+      "vlan": 0,
+      "wireless": false
+    },
+    {
+      "name": "SW_HOME",
+      "model": "2960-24TT",
+      "category": "switch",
+      "role": "access_switch",
+      "x": 150,
+      "y": 250,
+      "interfaces": {},
+      "gateway": "",
+      "interfaces_v6": {},
+      "gateway_v6": "",
+      "vlan": 0,
+      "wireless": false
+    },
+    {
+      "name": "AP_HOME",
+      "model": "AccessPoint-PT",
+      "category": "accesspoint",
+      "role": "end_host",
+      "x": 250,
+      "y": 330,
+      "interfaces": {},
+      "gateway": "",
+      "interfaces_v6": {},
+      "gateway_v6": "",
+      "vlan": 0,
+      "wireless": false
+    },
+    {
+      "name": "Laptop_A",
+      "model": "Laptop-PT",
+      "category": "laptop",
+      "role": "end_host",
+      "x": 80,
+      "y": 420,
+      "interfaces": {
+        "FastEthernet0": "192.168.1.101/24"
+      },
+      "gateway": "192.168.1.1",
+      "interfaces_v6": {},
+      "gateway_v6": "",
+      "vlan": 0,
+      "wireless": true
+    },
+    {
+      "name": "Laptop_B",
+      "model": "Laptop-PT",
+      "category": "laptop",
+      "role": "end_host",
+      "x": 180,
+      "y": 420,
+      "interfaces": {
+        "FastEthernet0": "192.168.1.102/24"
+      },
+      "gateway": "192.168.1.1",
+      "interfaces_v6": {},
+      "gateway_v6": "",
+      "vlan": 0,
+      "wireless": true
+    },
+    {
+      "name": "R_ISP",
+      "model": "2911",
+      "category": "router",
+      "role": "core_router",
+      "x": 450,
+      "y": 100,
+      "interfaces": {
+        "GigabitEthernet0/0": "203.0.113.9/30",
+        "GigabitEthernet0/1": "198.51.100.1/30",
+        "GigabitEthernet0/2": "203.0.113.17/30"
+      },
+      "gateway": "",
+      "interfaces_v6": {},
+      "gateway_v6": "",
+      "vlan": 0,
+      "wireless": false
+    },
+    {
+      "name": "R_AWS",
+      "model": "2911",
+      "category": "router",
+      "role": "edge_router",
+      "x": 450,
+      "y": 250,
+      "interfaces": {
+        "GigabitEthernet0/0": "198.51.100.2/30",
+        "GigabitEthernet0/1": "172.31.0.1/24"
+      },
+      "gateway": "",
+      "interfaces_v6": {},
+      "gateway_v6": "",
+      "vlan": 0,
+      "wireless": false
+    },
+    {
+      "name": "SW_AWS",
+      "model": "2960-24TT",
+      "category": "switch",
+      "role": "access_switch",
+      "x": 450,
+      "y": 360,
+      "interfaces": {},
+      "gateway": "",
+      "interfaces_v6": {},
+      "gateway_v6": "",
+      "vlan": 0,
+      "wireless": false
+    },
+    {
+      "name": "AWS_Relay",
+      "model": "Server-PT",
+      "category": "server",
+      "role": "end_host",
+      "x": 380,
+      "y": 470,
+      "interfaces": {
+        "FastEthernet0": "172.31.0.50/24"
+      },
+      "gateway": "172.31.0.1",
+      "interfaces_v6": {},
+      "gateway_v6": "",
+      "vlan": 0,
+      "wireless": false
+    },
+    {
+      "name": "STUN_Server",
+      "model": "Server-PT",
+      "category": "server",
+      "role": "end_host",
+      "x": 520,
+      "y": 470,
+      "interfaces": {
+        "FastEthernet0": "172.31.0.60/24"
+      },
+      "gateway": "172.31.0.1",
+      "interfaces_v6": {},
+      "gateway_v6": "",
+      "vlan": 0,
+      "wireless": false
+    },
+    {
+      "name": "R_REMOTE",
+      "model": "2911",
+      "category": "router",
+      "role": "edge_router",
+      "x": 750,
+      "y": 100,
+      "interfaces": {
+        "GigabitEthernet0/0": "203.0.113.18/30",
+        "GigabitEthernet0/1": "192.168.2.1/24"
+      },
+      "gateway": "",
+      "interfaces_v6": {},
+      "gateway_v6": "",
+      "vlan": 0,
+      "wireless": false
+    },
+    {
+      "name": "SW_REMOTE",
+      "model": "2960-24TT",
+      "category": "switch",
+      "role": "access_switch",
+      "x": 750,
+      "y": 250,
+      "interfaces": {},
+      "gateway": "",
+      "interfaces_v6": {},
+      "gateway_v6": "",
+      "vlan": 0,
+      "wireless": false
+    },
+    {
+      "name": "Laptop_C",
+      "model": "Laptop-PT",
+      "category": "laptop",
+      "role": "end_host",
+      "x": 750,
+      "y": 420,
+      "interfaces": {
+        "FastEthernet0": "192.168.2.101/24"
+      },
+      "gateway": "192.168.2.1",
+      "interfaces_v6": {},
+      "gateway_v6": "",
+      "vlan": 0,
+      "wireless": false
+    }
+  ],
+  "modules": [],
+  "links": [
+    {
+      "device_a": "R_HOME",
+      "port_a": "GigabitEthernet0/0",
+      "device_b": "R_ISP",
+      "port_b": "GigabitEthernet0/0",
+      "cable": "cross"
+    },
+    {
+      "device_a": "R_ISP",
+      "port_a": "GigabitEthernet0/1",
+      "device_b": "R_AWS",
+      "port_b": "GigabitEthernet0/0",
+      "cable": "cross"
+    },
+    {
+      "device_a": "R_ISP",
+      "port_a": "GigabitEthernet0/2",
+      "device_b": "R_REMOTE",
+      "port_b": "GigabitEthernet0/0",
+      "cable": "cross"
+    },
+    {
+      "device_a": "R_HOME",
+      "port_a": "GigabitEthernet0/1",
+      "device_b": "SW_HOME",
+      "port_b": "GigabitEthernet0/1",
+      "cable": "straight"
+    },
+    {
+      "device_a": "SW_HOME",
+      "port_a": "FastEthernet0/1",
+      "device_b": "AP_HOME",
+      "port_b": "Port 0",
+      "cable": "straight"
+    },
+    {
+      "device_a": "SW_HOME",
+      "port_a": "FastEthernet0/2",
+      "device_b": "Laptop_A",
+      "port_b": "FastEthernet0",
+      "cable": "straight"
+    },
+    {
+      "device_a": "SW_HOME",
+      "port_a": "FastEthernet0/3",
+      "device_b": "Laptop_B",
+      "port_b": "FastEthernet0",
+      "cable": "straight"
+    },
+    {
+      "device_a": "R_AWS",
+      "port_a": "GigabitEthernet0/1",
+      "device_b": "SW_AWS",
+      "port_b": "GigabitEthernet0/1",
+      "cable": "straight"
+    },
+    {
+      "device_a": "SW_AWS",
+      "port_a": "FastEthernet0/1",
+      "device_b": "AWS_Relay",
+      "port_b": "FastEthernet0",
+      "cable": "straight"
+    },
+    {
+      "device_a": "SW_AWS",
+      "port_a": "FastEthernet0/2",
+      "device_b": "STUN_Server",
+      "port_b": "FastEthernet0",
+      "cable": "straight"
+    },
+    {
+      "device_a": "R_REMOTE",
+      "port_a": "GigabitEthernet0/1",
+      "device_b": "SW_REMOTE",
+      "port_b": "GigabitEthernet0/1",
+      "cable": "straight"
+    },
+    {
+      "device_a": "SW_REMOTE",
+      "port_a": "FastEthernet0/1",
+      "device_b": "Laptop_C",
+      "port_b": "FastEthernet0",
+      "cable": "straight"
+    }
+  ],
+  "dhcp_pools": [
+    {
+      "router": "R_HOME",
+      "pool_name": "LAN_HOME",
+      "network": "192.168.1.0",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.1.1",
+      "dns": "8.8.8.8",
+      "excluded_start": "192.168.1.1",
+      "excluded_end": "192.168.1.10"
+    },
+    {
+      "router": "R_REMOTE",
+      "pool_name": "LAN_REMOTE",
+      "network": "192.168.2.0",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.2.1",
+      "dns": "8.8.8.8",
+      "excluded_start": "192.168.2.1",
+      "excluded_end": "192.168.2.10"
+    }
+  ],
+  "static_routes": [
+    {
+      "router": "R_HOME",
+      "destination": "0.0.0.0",
+      "mask": "0.0.0.0",
+      "next_hop": "203.0.113.9",
+      "admin_distance": 1
+    },
+    {
+      "router": "R_REMOTE",
+      "destination": "0.0.0.0",
+      "mask": "0.0.0.0",
+      "next_hop": "203.0.113.17",
+      "admin_distance": 1
+    }
+  ],
+  "ospf_configs": [
+    {
+      "router": "R_ISP",
+      "process_id": 1,
+      "router_id": "1.1.1.1",
+      "networks": [
+        {
+          "network": "203.0.113.8",
+          "wildcard": "0.0.0.3",
+          "area": 0
+        },
+        {
+          "network": "198.51.100.0",
+          "wildcard": "0.0.0.3",
+          "area": 0
+        },
+        {
+          "network": "203.0.113.16",
+          "wildcard": "0.0.0.3",
+          "area": 0
+        }
+      ]
+    },
+    {
+      "router": "R_AWS",
+      "process_id": 1,
+      "router_id": "2.2.2.2",
+      "networks": [
+        {
+          "network": "198.51.100.0",
+          "wildcard": "0.0.0.3",
+          "area": 0
+        },
+        {
+          "network": "172.31.0.0",
+          "wildcard": "0.0.0.255",
+          "area": 0
+        }
+      ]
+    }
+  ],
+  "rip_configs": [],
+  "eigrp_configs": [],
+  "vlans": [],
+  "access_ports": [],
+  "trunks": [],
+  "subinterfaces": [],
+  "validations": [],
+  "dual_stack": false,
+  "errors": [],
+  "warnings": []
+}

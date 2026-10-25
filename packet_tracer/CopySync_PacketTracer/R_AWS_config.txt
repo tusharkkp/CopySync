@@ -1,0 +1,23 @@
+enable
+configure terminal
+hostname R_AWS
+no ip domain-lookup
+
+interface GigabitEthernet0/0
+ ip address 198.51.100.2 255.255.255.252
+ no shutdown
+ exit
+
+interface GigabitEthernet0/1
+ ip address 172.31.0.1 255.255.255.0
+ no shutdown
+ exit
+
+router ospf 1
+ router-id 2.2.2.2
+ network 198.51.100.0 0.0.0.3 area 0
+ network 172.31.0.0 0.0.0.255 area 0
+ exit
+
+end
+write memory

@@ -1,0 +1,37 @@
+enable
+configure terminal
+hostname R_REMOTE
+no ip domain-lookup
+
+interface GigabitEthernet0/0
+ ip address 203.0.113.18 255.255.255.252
+ no shutdown
+ exit
+
+interface GigabitEthernet0/1
+ ip address 192.168.2.1 255.255.255.0
+ no shutdown
+ exit
+
+ip dhcp excluded-address 192.168.2.1 192.168.2.10
+ip dhcp pool LAN_REMOTE
+ network 192.168.2.0 255.255.255.0
+ default-router 192.168.2.1
+ dns-server 8.8.8.8
+ exit
+
+interface GigabitEthernet0/0
+ ip nat outside
+ exit
+
+interface GigabitEthernet0/1
+ ip nat inside
+ exit
+
+access-list 1 permit 192.168.2.0 0.0.0.255
+ip nat inside source list 1 interface GigabitEthernet0/0 overload
+
+ip route 0.0.0.0 0.0.0.0 203.0.113.17
+
+end
+write memory
