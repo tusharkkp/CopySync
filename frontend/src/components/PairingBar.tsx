@@ -255,6 +255,20 @@ export const PairingBar: React.FC<PairingBarProps> = ({
           </div>
 
           <div className="pairing-credentials">
+
+
+            <div className="credential-block">
+              <span className="credential-label">Session ID:</span>
+              <code className="session-id-display font-mono">{state.sessionId}</code>
+              <button
+                type="button"
+                className="btn btn-secondary btn-tiny"
+                onClick={() => state.sessionId && copyToClipboard(state.sessionId, 'Session ID')}
+              >
+                {copiedNotice === 'Session ID' ? <Check size={13} /> : <Copy size={13} />}
+                <span>{copiedNotice === 'Session ID' ? 'Copied' : 'Copy ID'}</span>
+              </button>
+            </div>
             <div className="credential-block">
               <span className="credential-label">Pairing Code:</span>
               <div className="code-display font-mono" data-testid="display-pairing-code">
@@ -269,19 +283,6 @@ export const PairingBar: React.FC<PairingBarProps> = ({
               >
                 {copiedNotice === 'Code' ? <Check size={13} /> : <Copy size={13} />}
                 <span>{copiedNotice === 'Code' ? 'Copied' : 'Copy Code'}</span>
-              </button>
-            </div>
-
-            <div className="credential-block">
-              <span className="credential-label">Session ID:</span>
-              <code className="session-id-display font-mono">{state.sessionId}</code>
-              <button
-                type="button"
-                className="btn btn-secondary btn-tiny"
-                onClick={() => state.sessionId && copyToClipboard(state.sessionId, 'Session ID')}
-              >
-                {copiedNotice === 'Session ID' ? <Check size={13} /> : <Copy size={13} />}
-                <span>{copiedNotice === 'Session ID' ? 'Copied' : 'Copy ID'}</span>
               </button>
             </div>
           </div>
